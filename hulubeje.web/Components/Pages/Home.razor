@@ -1,0 +1,2525 @@
+﻿@page "/"
+@rendermode InteractiveServer
+
+@using Microsoft.AspNetCore.Components.Web
+@using Microsoft.JSInterop
+@using HuluBeje.Web.Models
+@using HuluBeje.Web.Services
+
+@inject SessionService SessionService
+@inject BrowserStorageService BrowserStorage
+@inject RagService RagService
+@inject IJSRuntime JS
+
+<PageTitle>HuluBeje Support</PageTitle>
+
+<style>
+
+    /* ========================================================= */
+    /* ROOT                                                       */
+    /* ========================================================= */
+
+    .hb-root {
+        font-family:
+            Inter,
+            ui-sans-serif,
+            system-ui,
+            -apple-system,
+            BlinkMacSystemFont,
+            "Segoe UI",
+            sans-serif;
+
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+    }
+
+
+    /* ========================================================= */
+    /* ANIMATIONS                                                 */
+    /* ========================================================= */
+
+    @@keyframes hb-rise {
+        0% {
+            opacity: 0;
+            transform: translateY(8px);
+        }
+
+        100% {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @@keyframes hb-fade {
+        0% {
+            opacity: 0;
+        }
+
+        100% {
+            opacity: 1;
+        }
+    }
+
+    @@keyframes hb-scale-in {
+        0% {
+            opacity: 0;
+            transform: scale(.94);
+        }
+
+        100% {
+            opacity: 1;
+            transform: scale(1);
+        }
+    }
+
+    @@keyframes hb-dot {
+        0%,
+        60%,
+        100% {
+            opacity: .25;
+            transform: translateY(0);
+        }
+
+        30% {
+            opacity: 1;
+            transform: translateY(-3px);
+        }
+    }
+
+    @@keyframes hb-caret {
+        0%,
+        45% {
+            opacity: 1;
+        }
+
+        55%,
+        100% {
+            opacity: 0;
+        }
+    }
+
+    @@keyframes hb-drawer-in {
+        0% {
+            transform: translateX(-100%);
+        }
+
+        100% {
+            transform: translateX(0);
+        }
+    }
+
+    @@keyframes hb-voice-pulse {
+        0%,
+        100% {
+            box-shadow:
+                0 0 0 0
+                rgba(196, 56, 42, .25);
+        }
+
+        50% {
+            box-shadow:
+                0 0 0 7px
+                rgba(196, 56, 42, .08);
+        }
+    }
+
+    @@keyframes hb-spinner {
+        from {
+            transform: rotate(0deg);
+        }
+
+        to {
+            transform: rotate(360deg);
+        }
+    }
+
+
+    .hb-rise {
+        animation:
+            hb-rise
+            420ms
+            cubic-bezier(.2, .7, .2, 1)
+            both;
+    }
+
+    .hb-fade {
+        animation:
+            hb-fade
+            300ms
+            ease
+            both;
+    }
+
+    .hb-scale-in {
+        animation:
+            hb-scale-in
+            500ms
+            cubic-bezier(.2, .7, .2, 1)
+            both;
+    }
+
+
+    /* ========================================================= */
+    /* THEME                                                      */
+    /* ========================================================= */
+
+    .hb-theme-fade {
+        transition:
+            background-color 350ms ease,
+            border-color 350ms ease,
+            color 350ms ease;
+    }
+
+
+    /* ========================================================= */
+    /* LOGO                                                       */
+    /* ========================================================= */
+
+    .hb-logo {
+        display: block;
+        object-fit: contain;
+        user-select: none;
+        -webkit-user-drag: none;
+    }
+
+
+    /* ========================================================= */
+    /* SIDEBAR                                                    */
+    /* ========================================================= */
+
+    .hb-sidebar {
+        will-change: width;
+
+        transition:
+            width 350ms cubic-bezier(.4, 0, .2, 1),
+            transform 300ms cubic-bezier(.4, 0, .2, 1);
+    }
+
+    .hb-sidebar-inner {
+        width: 264px;
+        min-width: 264px;
+
+        height: 100%;
+
+        display: flex;
+        flex-direction: column;
+    }
+
+    .hb-sidebar-text {
+        transition:
+            opacity 200ms ease,
+            transform 240ms ease;
+    }
+
+    .hb-sidebar-collapsed .hb-sidebar-text {
+        opacity: 0;
+        transform: translateX(-8px);
+        pointer-events: none;
+    }
+
+    .hb-sidebar-list {
+        opacity: 1;
+        transition: opacity 180ms ease;
+    }
+
+    .hb-sidebar-collapsed .hb-sidebar-list {
+        opacity: 0;
+        pointer-events: none;
+    }
+
+
+    /* ========================================================= */
+    /* SCROLLBAR                                                  */
+    /* ========================================================= */
+
+    .hb-scroll::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+    }
+
+    .hb-scroll::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    .hb-scroll::-webkit-scrollbar-thumb {
+        background: var(--hb-line);
+        border-radius: 999px;
+    }
+
+    .hb-scroll::-webkit-scrollbar-thumb:hover {
+        background: var(--hb-muted);
+    }
+
+
+    /* ========================================================= */
+    /* ICON BUTTON                                                */
+    /* ========================================================= */
+
+    .hb-icon-button {
+        display: flex;
+
+        height: 34px;
+        width: 34px;
+
+        flex-shrink: 0;
+
+        align-items: center;
+        justify-content: center;
+
+        border-radius: 9px;
+
+        color: var(--hb-muted);
+
+        transition:
+            background-color 180ms ease,
+            color 180ms ease,
+            transform 150ms ease;
+    }
+
+    .hb-icon-button:hover {
+        background-color: var(--hb-line-soft);
+        color: var(--hb-fg);
+    }
+
+    .hb-icon-button:active {
+        transform: scale(.92);
+    }
+
+
+    /* ========================================================= */
+    /* TOP BAR                                                    */
+    /* ========================================================= */
+
+    .hb-topbar {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+
+        height: 64px;
+
+        flex-shrink: 0;
+
+        padding: 0 16px;
+    }
+
+    @@media (min-width: 768px) {
+
+        .hb-topbar {
+            height: 68px;
+            padding: 0 24px;
+        }
+
+    }
+
+    .hb-topbar-title {
+        min-width: 0;
+
+        font-size: 14px;
+        font-weight: 600;
+
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+
+    /* ========================================================= */
+    /* CONVERSATIONS                                              */
+    /* ========================================================= */
+
+    .hb-conversation {
+        position: relative;
+        margin-bottom: 2px;
+    }
+
+    .hb-conversation-button {
+        display: flex;
+
+        width: 100%;
+
+        align-items: center;
+
+        padding:
+            9px
+            34px
+            9px
+            10px;
+
+        border-radius: 8px;
+
+        text-align: left;
+
+        color: var(--hb-fg);
+
+        font-size: 12.5px;
+
+        transition:
+            background-color 180ms ease;
+    }
+
+    .hb-conversation-button:hover {
+        background-color: var(--hb-line-soft);
+    }
+
+    .hb-conversation-button.hb-active {
+        background-color: var(--hb-line-soft);
+    }
+
+    .hb-delete-button {
+        position: absolute;
+
+        right: 4px;
+        top: 50%;
+
+        transform: translateY(-50%);
+
+        display: flex;
+
+        height: 26px;
+        width: 26px;
+
+        align-items: center;
+        justify-content: center;
+
+        border-radius: 6px;
+
+        color: var(--hb-muted);
+
+        opacity: 0;
+
+        pointer-events: none;
+
+        transition:
+            opacity 180ms ease,
+            background-color 180ms ease,
+            color 180ms ease;
+    }
+
+    .hb-conversation:hover .hb-delete-button,
+    .hb-conversation:focus-within .hb-delete-button {
+        opacity: 1;
+        pointer-events: auto;
+    }
+
+    .hb-delete-button:hover {
+        background-color: rgba(196, 56, 42, .10);
+        color: var(--hb-accent);
+    }
+
+
+    /* ========================================================= */
+    /* DANGER BUTTON                                              */
+    /* ========================================================= */
+
+    .hb-danger-button {
+        display: flex;
+
+        width: 100%;
+        height: 36px;
+
+        align-items: center;
+        gap: 10px;
+
+        padding: 0 12px;
+
+        border-radius: 8px;
+
+        color: var(--hb-muted);
+
+        font-size: 12.5px;
+        font-weight: 500;
+
+        text-align: left;
+
+        transition:
+            background-color 180ms ease,
+            color 180ms ease;
+    }
+
+    .hb-danger-button:hover {
+        background-color: rgba(196, 56, 42, .08);
+        color: var(--hb-accent);
+    }
+
+
+    /* ========================================================= */
+    /* QUICK PROMPT PILLS                                         */
+    /* ========================================================= */
+
+    .hb-pill {
+        display: inline-flex;
+
+        align-items: center;
+        justify-content: center;
+
+        padding: 11px 18px;
+
+        border:
+            1px solid
+            var(--hb-line);
+
+        border-radius: 999px;
+
+        background: var(--hb-surface);
+        color: var(--hb-fg);
+
+        font-size: 13px;
+
+        cursor: pointer;
+
+        transition:
+            border-color 180ms ease,
+            color 180ms ease,
+            transform 180ms ease,
+            box-shadow 180ms ease;
+    }
+
+    .hb-pill:hover {
+        border-color: var(--hb-accent);
+        color: var(--hb-accent);
+
+        transform: translateY(-2px);
+
+        box-shadow:
+            0 8px 22px -10px
+            rgba(196, 56, 42, .4);
+    }
+
+    .hb-pill:active {
+        transform: translateY(0);
+    }
+
+
+    /* ========================================================= */
+    /* COMPOSER                                                   */
+    /* ========================================================= */
+
+    .hb-composer {
+        display: flex;
+
+        align-items: flex-end;
+
+        gap: 8px;
+
+        padding:
+            10px
+            10px
+            10px
+            18px;
+
+        border:
+            1px solid
+            var(--hb-line);
+
+        border-radius: 26px;
+
+        background: var(--hb-surface);
+
+        transition:
+            border-color 200ms ease,
+            box-shadow 200ms ease,
+            background-color 350ms ease;
+    }
+
+    .hb-composer:focus-within {
+        border-color: var(--hb-fg);
+
+        box-shadow:
+            0 0 0 3px var(--hb-line-soft),
+            0 10px 32px -16px rgba(0, 0, 0, .25);
+    }
+
+    .hb-composer-textarea {
+        flex: 1;
+
+        min-height: 24px;
+        max-height: 180px;
+
+        resize: none;
+
+        border: 0;
+        outline: none;
+
+        background: transparent;
+
+        padding: 8px 0;
+
+        color: var(--hb-fg);
+
+        font-size: 14px;
+        line-height: 1.5;
+    }
+
+    .hb-composer-textarea::placeholder {
+        color: var(--hb-muted);
+    }
+
+
+    /* ========================================================= */
+    /* SEND BUTTON                                                */
+    /* ========================================================= */
+
+    .hb-send-button {
+        display: flex;
+
+        height: 36px;
+        width: 36px;
+
+        flex-shrink: 0;
+
+        align-items: center;
+        justify-content: center;
+
+        border-radius: 50%;
+
+        transition:
+            background-color 180ms ease,
+            color 180ms ease,
+            opacity 180ms ease,
+            transform 150ms ease;
+    }
+
+    .hb-send-button:not(:disabled) {
+        background-color: var(--hb-accent);
+        color: var(--hb-btn-fg);
+        cursor: pointer;
+    }
+
+    .hb-send-button:not(:disabled):hover {
+        transform: scale(1.06);
+    }
+
+    .hb-send-button:not(:disabled):active {
+        transform: scale(.92);
+    }
+
+    .hb-send-button:disabled {
+        background-color: var(--hb-line);
+        color: var(--hb-muted);
+        opacity: .6;
+        cursor: not-allowed;
+    }
+
+
+    /* ========================================================= */
+    /* VOICE BUTTON                                               */
+    /* ========================================================= */
+
+    .hb-voice-button {
+        display: flex;
+
+        height: 36px;
+        width: 36px;
+
+        flex-shrink: 0;
+
+        align-items: center;
+        justify-content: center;
+
+        border-radius: 50%;
+
+        color: var(--hb-muted);
+
+        transition:
+            background-color 180ms ease,
+            color 180ms ease,
+            transform 150ms ease,
+            opacity 180ms ease;
+    }
+
+    .hb-voice-button:hover:not(:disabled) {
+        background-color: var(--hb-line-soft);
+        color: var(--hb-fg);
+    }
+
+    .hb-voice-button:active:not(:disabled) {
+        transform: scale(.92);
+    }
+
+    .hb-voice-button:disabled {
+        cursor: not-allowed;
+        opacity: .45;
+    }
+
+    .hb-voice-recording {
+        background-color: var(--hb-accent);
+        color: var(--hb-btn-fg);
+
+        animation:
+            hb-voice-pulse
+            1.4s
+            ease-in-out
+            infinite;
+    }
+
+    .hb-voice-recording:hover {
+        background-color: var(--hb-accent);
+        color: var(--hb-btn-fg);
+    }
+
+
+    /* ========================================================= */
+    /* VOICE PROCESSING MESSAGE                                   */
+    /* ========================================================= */
+
+    .hb-processing-message {
+        display: flex;
+
+        align-items: flex-start;
+
+        gap: 12px;
+
+        animation:
+            hb-rise
+            300ms
+            cubic-bezier(.2, .7, .2, 1)
+            both;
+    }
+
+    .hb-processing-avatar {
+        display: flex;
+
+        height: 28px;
+        width: 28px;
+
+        flex-shrink: 0;
+
+        align-items: center;
+        justify-content: center;
+
+        border-radius: 50%;
+
+        background-color: var(--hb-line-soft);
+    }
+
+    .hb-processing-bubble {
+        display: flex;
+
+        min-height: 46px;
+
+        align-items: center;
+
+        gap: 10px;
+
+        padding:
+            10px
+            14px;
+
+        border:
+            1px solid
+            var(--hb-line);
+
+        border-radius:
+            16px
+            16px
+            16px
+            5px;
+
+        background-color: var(--hb-surface);
+
+        color: var(--hb-muted);
+
+        font-size: 13px;
+    }
+
+    .hb-processing-spinner {
+        height: 15px;
+        width: 15px;
+
+        flex-shrink: 0;
+
+        border:
+            2px solid
+            var(--hb-line);
+
+        border-top-color:
+            var(--hb-accent);
+
+        border-radius: 50%;
+
+        animation:
+            hb-spinner
+            .8s
+            linear
+            infinite;
+    }
+
+    .hb-processing-text {
+        display: flex;
+
+        align-items: center;
+
+        gap: 3px;
+    }
+
+    .hb-processing-dot {
+        animation:
+            hb-dot
+            1.2s
+            ease-in-out
+            infinite;
+    }
+
+    .hb-processing-dot:nth-child(2) {
+        animation-delay: .15s;
+    }
+
+    .hb-processing-dot:nth-child(3) {
+        animation-delay: .3s;
+    }
+
+
+    /* ========================================================= */
+    /* MODAL                                                      */
+    /* ========================================================= */
+
+    .hb-modal-backdrop {
+        position: fixed;
+
+        inset: 0;
+
+        z-index: 100;
+
+        display: flex;
+
+        align-items: center;
+        justify-content: center;
+
+        padding: 20px;
+
+        background: rgba(0, 0, 0, .4);
+
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+
+        animation:
+            hb-fade
+            200ms
+            ease
+            both;
+    }
+
+    .hb-modal {
+        width: 100%;
+        max-width: 400px;
+
+        border:
+            1px solid
+            var(--hb-line);
+
+        border-radius: 20px;
+
+        background: var(--hb-surface);
+        color: var(--hb-fg);
+
+        box-shadow:
+            0 24px 72px
+            rgba(0, 0, 0, .24);
+
+        animation:
+            hb-scale-in
+            300ms
+            cubic-bezier(.2, .7, .2, 1)
+            both;
+    }
+
+
+    /* ========================================================= */
+    /* RESPONSIVE                                                  */
+    /* ========================================================= */
+
+    .hb-only-mobile {
+        display: flex;
+    }
+
+    .hb-only-desktop {
+        display: none;
+    }
+
+    @@media (min-width: 768px) {
+
+        .hb-only-mobile {
+            display: none !important;
+        }
+
+        .hb-only-desktop {
+            display: flex;
+        }
+
+    }
+
+
+    /* ========================================================= */
+    /* MOBILE SIDEBAR                                             */
+    /* ========================================================= */
+
+    .hb-mobile-backdrop {
+        display: none;
+    }
+
+    @@media (max-width: 767.98px) {
+
+        .hb-sidebar {
+            position: fixed;
+
+            top: 0;
+            left: 0;
+            bottom: 0;
+
+            width: 282px !important;
+
+            z-index: 60;
+
+            transform: translateX(-100%);
+
+            box-shadow:
+                8px 0 40px
+                rgba(0, 0, 0, .22);
+        }
+
+        .hb-sidebar.hb-mobile-open {
+            animation:
+                hb-drawer-in
+                320ms
+                cubic-bezier(.4, 0, .2, 1)
+                both;
+        }
+
+        .hb-mobile-backdrop {
+            display: block;
+
+            position: fixed;
+
+            inset: 0;
+
+            z-index: 55;
+
+            background: rgba(0, 0, 0, .45);
+
+            backdrop-filter: blur(2px);
+            -webkit-backdrop-filter: blur(2px);
+
+            animation:
+                hb-fade
+                200ms
+                ease
+                both;
+        }
+
+        .hb-sidebar-collapsed .hb-sidebar-text,
+        .hb-sidebar-collapsed .hb-sidebar-list {
+            opacity: 1 !important;
+
+            transform: none !important;
+
+            pointer-events: auto !important;
+        }
+
+    }
+
+
+    /* ========================================================= */
+    /* REDUCED MOTION                                             */
+    /* ========================================================= */
+
+    @@media (prefers-reduced-motion: reduce) {
+
+        .hb-rise,
+        .hb-fade,
+        .hb-scale-in,
+        .hb-dot,
+        .hb-voice-pulse,
+        .hb-processing-spinner,
+        .hb-mobile-backdrop,
+        .hb-sidebar.hb-mobile-open {
+            animation: none !important;
+        }
+
+        .hb-theme-fade,
+        .hb-sidebar,
+        .hb-sidebar-text,
+        .hb-pill,
+        .hb-icon-button,
+        .hb-delete-button,
+        .hb-danger-button,
+        .hb-conversation-button,
+        .hb-composer,
+        .hb-send-button,
+        .hb-voice-button {
+            transition: none !important;
+        }
+
+    }
+
+</style>
+
+
+<div class="hb-root hb-theme-fade @ThemeClass flex h-screen overflow-hidden"
+     style="@ThemeVariables">
+
+
+    <!-- ========================================================= -->
+    <!-- MOBILE BACKDROP                                            -->
+    <!-- ========================================================= -->
+
+    @if (MobileSidebarOpen)
+    {
+        <div class="hb-mobile-backdrop"
+             @onclick="CloseMobileSidebar">
+        </div>
+    }
+
+
+    <!-- ========================================================= -->
+    <!-- SIDEBAR                                                    -->
+    <!-- ========================================================= -->
+
+    <aside class="hb-sidebar @SidebarClass @(MobileSidebarOpen ? "hb-mobile-open" : "")"
+           style="background-color: var(--hb-sidebar);">
+
+        <div class="hb-sidebar-inner">
+
+
+            <!-- SIDEBAR HEADER -->
+            <div class="flex h-[64px] shrink-0 items-center gap-2 px-3 md:h-[68px]">
+
+                <div class="flex min-w-0 flex-1 items-center gap-2.5 px-1.5">
+
+                    <img src="images/hulu-logo.png"
+                         alt="HuluBeje"
+                         class="hb-logo h-7 w-7 shrink-0" />
+
+                    <div class="hb-sidebar-text truncate text-[13.5px] font-semibold">
+                        HuluBeje
+                    </div>
+
+                </div>
+
+
+                <button @onclick="HandleSidebarCollapse"
+                        title="Collapse sidebar"
+                        class="hb-icon-button hb-only-desktop">
+
+                    <svg class="h-4 w-4"
+                         viewBox="0 0 24 24"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="1.8">
+
+                        <path d="M15 6l-6 6 6 6" />
+
+                    </svg>
+
+                </button>
+
+
+                <button @onclick="CloseMobileSidebar"
+                        title="Close menu"
+                        class="hb-icon-button hb-only-mobile">
+
+                    <svg class="h-4 w-4"
+                         viewBox="0 0 24 24"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="1.8">
+
+                        <path d="M6 6l12 12M18 6L6 18" />
+
+                    </svg>
+
+                </button>
+
+            </div>
+
+
+            <!-- NEW CHAT -->
+            <div class="px-3 pb-3">
+
+                <button @onclick="CreateNewChatFromMenu"
+                        class="@NewChatClass">
+
+                    <svg class="h-[15px] w-[15px] shrink-0"
+                         viewBox="0 0 24 24"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2">
+
+                        <path d="M12 5v14M5 12h14" />
+
+                    </svg>
+
+                    <span class="hb-sidebar-text">
+                        New chat
+                    </span>
+
+                </button>
+
+            </div>
+
+
+            <!-- CHAT LIST -->
+            <div class="hb-sidebar-list flex min-h-0 flex-1 flex-col px-3">
+
+                <div class="hb-mono mb-2 px-2 text-[9px] uppercase tracking-[.18em]"
+                     style="color: var(--hb-muted);">
+
+                    Chats
+
+                </div>
+
+
+                <div class="hb-scroll min-h-0 flex-1 overflow-y-auto pb-2 pr-1">
+
+                    @if (Conversations.Count == 0)
+                    {
+                        <div class="px-2 py-4 text-[12.5px]"
+                             style="color: var(--hb-muted);">
+
+                            No conversations yet.
+
+                        </div>
+                    }
+                    else
+                    {
+                        @foreach (var conversation in Conversations)
+                        {
+                            <div class="hb-conversation">
+
+                                <button @onclick="() => SelectConversationFromMenu(conversation.Id)"
+                                        class="@GetConversationClass(conversation.Id)">
+
+                                    <span class="min-w-0 flex-1 truncate">
+                                        @conversation.Title
+                                    </span>
+
+                                </button>
+
+
+                                <button @onclick="() => DeleteChat(conversation.Id)"
+                                        @onclick:stopPropagation="true"
+                                        title="Delete conversation"
+                                        class="hb-delete-button">
+
+                                    <svg class="h-[13px] w-[13px]"
+                                         viewBox="0 0 24 24"
+                                         fill="none"
+                                         stroke="currentColor"
+                                         stroke-width="1.9">
+
+                                        <path d="M3 6h18" />
+                                        <path d="M8 6V4h8v2" />
+                                        <path d="M19 6l-1 14H6L5 6" />
+                                        <path d="M10 11v5" />
+                                        <path d="M14 11v5" />
+
+                                    </svg>
+
+                                </button>
+
+                            </div>
+                        }
+                    }
+
+                </div>
+
+            </div>
+
+
+            <!-- SIDEBAR FOOTER -->
+            <div class="shrink-0 border-t p-3"
+                 style="border-color: var(--hb-line);">
+
+                <button @onclick="OpenDeleteAllDialog"
+                        class="hb-danger-button hb-sidebar-text mb-1">
+
+                    <svg class="h-[15px] w-[15px]"
+                         viewBox="0 0 24 24"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="1.8">
+
+                        <path d="M3 6h18" />
+                        <path d="M8 6V4h8v2" />
+                        <path d="M19 6l-1 14H6L5 6" />
+
+                    </svg>
+
+                    Delete all chats
+
+                </button>
+
+
+                <button @onclick="ToggleTheme"
+                        class="@ThemeButtonClass">
+
+                    <div class="relative h-4 w-4 shrink-0">
+
+                        @if (!IsDark)
+                        {
+                            <svg class="h-4 w-4"
+                                 viewBox="0 0 24 24"
+                                 fill="none"
+                                 stroke="currentColor"
+                                 stroke-width="1.8">
+
+                                <path d="M12 3v2" />
+                                <path d="M12 19v2" />
+                                <path d="M3 12h2" />
+                                <path d="M19 12h2" />
+
+                                <circle cx="12"
+                                        cy="12"
+                                        r="4" />
+
+                            </svg>
+                        }
+                        else
+                        {
+                            <svg class="h-4 w-4"
+                                 viewBox="0 0 24 24"
+                                 fill="none"
+                                 stroke="currentColor"
+                                 stroke-width="1.8">
+
+                                <path d="M21 12.8A8.5 8.5 0 1 1 11.2 3A6.7 6.7 0 0 0 21 12.8Z" />
+
+                            </svg>
+                        }
+
+                    </div>
+
+                    <span class="hb-sidebar-text">
+                        @(IsDark ? "Light mode" : "Dark mode")
+                    </span>
+
+                </button>
+
+            </div>
+
+        </div>
+
+    </aside>
+
+
+    <!-- ========================================================= -->
+    <!-- MAIN                                                       -->
+    <!-- ========================================================= -->
+
+    <main class="flex min-w-0 flex-1 flex-col">
+
+
+        <!-- TOP BAR -->
+        <header class="hb-theme-fade hb-topbar">
+
+            <button @onclick="ToggleMobileSidebar"
+                    title="Open menu"
+                    class="hb-icon-button hb-only-mobile">
+
+                <svg class="h-4 w-4"
+                     viewBox="0 0 24 24"
+                     fill="none"
+                     stroke="currentColor"
+                     stroke-width="1.8">
+
+                    <path d="M4 7h16M4 12h16M4 17h16" />
+
+                </svg>
+
+            </button>
+
+
+            @if (SidebarCollapsed)
+            {
+                <button @onclick="ToggleSidebar"
+                        title="Open sidebar"
+                        class="hb-icon-button hb-only-desktop">
+
+                    <svg class="h-4 w-4"
+                         viewBox="0 0 24 24"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="1.8">
+
+                        <path d="M9 6l6 6-6 6" />
+
+                    </svg>
+
+                </button>
+            }
+
+
+            <img src="images/hulu-logo.png"
+                 alt="HuluBeje"
+                 class="hb-logo hb-only-mobile h-7 w-7" />
+
+
+            <div class="hb-topbar-title flex-1">
+
+                @(ActiveConversation?.Title ?? "New chat")
+
+            </div>
+
+        </header>
+
+
+        <!-- ========================================================= -->
+        <!-- CHAT                                                       -->
+        <!-- ========================================================= -->
+
+        <section class="hb-scroll min-h-0 flex-1 overflow-y-auto scroll-smooth">
+
+            <div class="mx-auto flex min-h-full w-full max-w-3xl flex-col px-4 py-8 sm:px-6 sm:py-10 md:px-8">
+
+
+                @if (ActiveConversation?.Messages.Count == 0)
+                {
+                    <!-- EMPTY CHAT -->
+
+                    <div class="flex flex-1 flex-col items-center justify-center">
+
+                        <img src="images/hulu-logo.png"
+                             alt="HuluBeje"
+                             class="hb-scale-in mb-6 h-16 w-16 sm:h-20 sm:w-20" />
+
+
+                        <h1 class="hb-rise text-center text-[27px] font-semibold leading-tight tracking-tight sm:text-[32px] md:text-[38px]">
+
+                            How can I help you today?
+
+                        </h1>
+
+
+                        <p class="hb-rise mt-3 max-w-md px-3 text-center text-[13.5px] leading-relaxed"
+                           style="color: var(--hb-muted);">
+
+                            Ask about orders, delivery, payments, returns, or anything else.
+
+                        </p>
+
+
+                        <div class="mt-10 flex w-full max-w-2xl flex-wrap justify-center gap-2.5">
+
+                            <button @onclick="StartDeliveryQuestion"
+                                    class="hb-pill">
+
+                                Delivery & orders
+
+                            </button>
+
+
+                            <button @onclick="StartReturnQuestion"
+                                    class="hb-pill">
+
+                                Returns & refunds
+
+                            </button>
+
+
+                            <button @onclick="StartPaymentQuestion"
+                                    class="hb-pill">
+
+                                Payments
+
+                            </button>
+
+
+                            <button @onclick="StartProductQuestion"
+                                    class="hb-pill">
+
+                                Products
+
+                            </button>
+
+                        </div>
+
+                    </div>
+                }
+                else
+                {
+                    <!-- MESSAGES -->
+
+                    <div class="flex flex-col gap-7 sm:gap-8">
+
+                        @if (ActiveConversation is not null)
+                        {
+                            @foreach (var message in ActiveConversation.Messages)
+                            {
+                                @if (message.Role == "user")
+                                {
+                                    <div class="hb-rise flex justify-end">
+
+                                        <div class="max-w-[85%] whitespace-pre-line rounded-[22px] rounded-br-md px-4 py-2.5 text-[14px] leading-[1.65] sm:max-w-[75%]"
+                                             style="background-color: var(--hb-accent); color: var(--hb-user-fg);">
+
+                                            @message.Content
+
+                                        </div>
+
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="hb-rise flex items-start gap-3">
+
+                                        <div class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full"
+                                             style="background-color: var(--hb-line-soft);">
+
+                                            <img src="images/hulu-logo.png"
+                                                 alt="HuluBeje"
+                                                 class="hb-logo h-[18px] w-[18px]" />
+
+                                        </div>
+
+                                        <div class="max-w-[88%] whitespace-pre-line pt-1 text-[14.5px] leading-[1.75] sm:max-w-[85%]">
+
+                                            @message.Content
+
+                                        </div>
+
+                                    </div>
+                                }
+                            }
+                        }
+
+
+                        <!-- ================================================= -->
+                        <!-- TEXT RESPONSE STREAM                              -->
+                        <!-- ================================================= -->
+
+                        @if (!string.IsNullOrWhiteSpace(StreamingText))
+                        {
+                            <div class="flex items-start gap-3">
+
+                                <div class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full"
+                                     style="background-color: var(--hb-line-soft);">
+
+                                    <img src="images/hulu-logo.png"
+                                         alt="HuluBeje"
+                                         class="hb-logo h-[18px] w-[18px]" />
+
+                                </div>
+
+
+                                <div class="max-w-[88%] whitespace-pre-line pt-1 text-[14.5px] leading-[1.75] sm:max-w-[85%]">
+
+                                    @StreamingText
+
+                                    <span class="hb-caret"></span>
+
+                                </div>
+
+                            </div>
+                        }
+
+
+                        <!-- ================================================= -->
+                        <!-- NORMAL TEXT LOADING                              -->
+                        <!-- ================================================= -->
+
+                        @if (Loading &&
+                            !VoiceProcessing &&
+                            string.IsNullOrWhiteSpace(StreamingText))
+                        {
+                            <div class="hb-fade flex items-start gap-3">
+
+                                <div class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full"
+                                     style="background-color: var(--hb-line-soft);">
+
+                                    <img src="images/hulu-logo.png"
+                                         alt="HuluBeje"
+                                         class="hb-logo h-[18px] w-[18px]" />
+
+                                </div>
+
+
+                                <div class="flex items-center gap-1 pt-3.5">
+
+                                    <span class="h-1.5 w-1.5 rounded-full hb-dot"
+                                          style="background-color: var(--hb-muted);">
+                                    </span>
+
+                                    <span class="h-1.5 w-1.5 rounded-full hb-dot"
+                                          style="background-color: var(--hb-muted);">
+                                    </span>
+
+                                    <span class="h-1.5 w-1.5 rounded-full hb-dot"
+                                          style="background-color: var(--hb-muted);">
+                                    </span>
+
+                                </div>
+
+                            </div>
+                        }
+
+
+                        <!-- ================================================= -->
+                        <!-- VOICE PROCESSING                                  -->
+                        <!-- ================================================= -->
+
+                        @if (VoiceProcessing)
+                        {
+                            <div class="hb-processing-message">
+
+                                <div class="hb-processing-avatar">
+
+                                    <img src="images/hulu-logo.png"
+                                         alt="HuluBeje"
+                                         class="hb-logo h-[18px] w-[18px]" />
+
+                                </div>
+
+
+                                <div class="hb-processing-bubble">
+
+                                    <div class="hb-processing-spinner"></div>
+
+
+                                    <div class="hb-processing-text">
+
+                                        <span>
+                                            Processing your voice message
+                                        </span>
+
+                                        <span class="hb-processing-dot">
+                                            .
+                                        </span>
+
+                                        <span class="hb-processing-dot">
+                                            .
+                                        </span>
+
+                                        <span class="hb-processing-dot">
+                                            .
+                                        </span>
+
+                                    </div>
+
+                                </div>
+
+                            </div>
+                        }
+
+                    </div>
+                }
+
+            </div>
+
+        </section>
+
+
+        <!-- ========================================================= -->
+        <!-- COMPOSER                                                   -->
+        <!-- ========================================================= -->
+
+        <div class="shrink-0 px-4 pb-4 pt-2 sm:px-6 sm:pb-6 md:px-8">
+
+            <div class="mx-auto max-w-3xl">
+
+
+                <div class="hb-composer">
+
+                    <textarea @bind="Query"
+                              @bind:event="oninput"
+                              @onkeydown="HandleKeyDown"
+                              rows="1"
+                              disabled="@(Loading || IsRecording || VoiceProcessing)"
+                              placeholder="Ask HuluBeje anything..."
+                              class="hb-composer-textarea hb-scroll">
+                    </textarea>
+
+
+                    <!-- ================================================= -->
+                    <!-- VOICE BUTTON                                      -->
+                    <!-- ================================================= -->
+
+                    <button @onclick="ToggleVoiceRecording"
+                            disabled="@(Loading || VoiceProcessing)"
+                            aria-label="@(IsRecording ? "Stop recording" : "Voice input")"
+                            title="@(IsRecording ? "Stop recording" : "Voice input")"
+                            class="hb-voice-button @(IsRecording ? "hb-voice-recording" : "")">
+
+                        @if (IsRecording)
+                        {
+                            <svg class="h-[16px] w-[16px]"
+                                 viewBox="0 0 24 24"
+                                 fill="currentColor">
+
+                                <rect x="6"
+                                      y="6"
+                                      width="12"
+                                      height="12"
+                                      rx="2" />
+
+                            </svg>
+                        }
+                        else
+                        {
+                            <svg class="h-[17px] w-[17px]"
+                                 viewBox="0 0 24 24"
+                                 fill="none"
+                                 stroke="currentColor"
+                                 stroke-width="1.9"
+                                 stroke-linecap="round"
+                                 stroke-linejoin="round">
+
+                                <rect x="9"
+                                      y="2"
+                                      width="6"
+                                      height="13"
+                                      rx="3" />
+
+                                <path d="M5 11a7 7 0 0 0 14 0" />
+
+                                <path d="M12 18v4" />
+
+                                <path d="M8 22h8" />
+
+                            </svg>
+                        }
+
+                    </button>
+
+
+                    <!-- ================================================= -->
+                    <!-- SEND BUTTON                                       -->
+                    <!-- ================================================= -->
+
+                    <button @onclick="SendMessage"
+                            disabled="@(!CanSend)"
+                            aria-label="Send message"
+                            class="hb-send-button">
+
+                        <svg class="h-[16px] w-[16px]"
+                             viewBox="0 0 24 24"
+                             fill="none"
+                             stroke="currentColor"
+                             stroke-width="2.2"
+                             stroke-linecap="round"
+                             stroke-linejoin="round">
+
+                            <path d="M12 19V5" />
+
+                            <path d="m6 11 6-6 6 6" />
+
+                        </svg>
+
+                    </button>
+
+                </div>
+
+
+                <!-- ===================================================== -->
+                <!-- NORMAL DISCLAIMER                                     -->
+                <!-- ===================================================== -->
+
+                <p class="mt-3 hidden text-center text-[11px] sm:block"
+                   style="color: var(--hb-muted);">
+
+                    HuluBeje may make mistakes. Please verify important information.
+
+                </p>
+
+            </div>
+
+        </div>
+
+    </main>
+
+</div>
+
+
+<!-- ============================================================= -->
+<!-- DELETE ALL DIALOG                                             -->
+<!-- ============================================================= -->
+
+@if (ShowDeleteAllDialog)
+{
+    <div class="hb-modal-backdrop">
+
+        <div class="hb-modal">
+
+            <div class="p-5">
+
+                <div class="mb-4 flex items-start gap-3">
+
+                    <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
+                         style="background-color: rgba(196,56,42,.10); color: var(--hb-accent);">
+
+                        <svg class="h-[17px] w-[17px]"
+                             viewBox="0 0 24 24"
+                             fill="none"
+                             stroke="currentColor"
+                             stroke-width="1.8">
+
+                            <path d="M3 6h18" />
+                            <path d="M8 6V4h8v2" />
+                            <path d="M19 6l-1 14H6L5 6" />
+
+                        </svg>
+
+                    </div>
+
+
+                    <div>
+
+                        <h2 class="text-[14px] font-semibold">
+                            Delete all chats?
+                        </h2>
+
+                        <p class="mt-1 text-[12px] leading-relaxed"
+                           style="color: var(--hb-muted);">
+
+                            This will permanently remove all conversations
+                            saved in this browser.
+
+                        </p>
+
+                    </div>
+
+                </div>
+
+
+                <div class="flex justify-end gap-2">
+
+                    <button @onclick="CloseDeleteAllDialog"
+                            class="rounded-lg px-3.5 py-2 text-[12px] font-medium transition-colors hover:bg-[var(--hb-line-soft)]">
+
+                        Cancel
+
+                    </button>
+
+
+                    <button @onclick="ConfirmDeleteAllChats"
+                            class="rounded-lg px-3.5 py-2 text-[12px] font-medium text-white hover:opacity-90"
+                            style="background-color: var(--hb-accent);">
+
+                        Delete all
+
+                    </button>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+}
+
+
+@code {
+
+    /* ========================================================= */
+    /* STATE                                                       */
+    /* ========================================================= */
+
+    private IReadOnlyList<SupportSession> Conversations =>
+        SessionService.Sessions;
+
+    private SupportSession? ActiveConversation =>
+        SessionService.ActiveSession;
+
+    private string Query { get; set; } = "";
+
+    private bool Loading { get; set; }
+
+    private bool IsRecording { get; set; }
+
+    private bool VoiceProcessing { get; set; }
+
+    private bool IsDark { get; set; }
+
+    private bool SidebarCollapsed { get; set; }
+
+    private bool MobileSidebarOpen { get; set; }
+
+    private string? StreamingText { get; set; }
+
+    private bool ShowDeleteAllDialog { get; set; }
+
+    private const string StorageKey =
+        "hulubeje_guest_sessions";
+
+
+    /* ========================================================= */
+    /* INITIALIZATION                                             */
+    /* ========================================================= */
+
+    protected override async Task OnAfterRenderAsync(
+        bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        var sessions =
+            await BrowserStorage.GetAsync<
+                List<SupportSession>
+            >(StorageKey);
+
+        if (sessions is not null &&
+            sessions.Count > 0)
+        {
+            SessionService.RestoreSessions(
+                sessions
+            );
+
+            SessionService.RemoveExpiredSessions();
+
+            await SaveSessions();
+        }
+
+        if (SessionService.Sessions.Count == 0)
+        {
+            SessionService.CreateGuestSession();
+
+            await SaveSessions();
+        }
+
+        await InvokeAsync(
+            StateHasChanged
+        );
+    }
+
+
+    /* ========================================================= */
+    /* NEW CHAT                                                    */
+    /* ========================================================= */
+
+    private async Task CreateNewChat()
+    {
+        SessionService.CreateGuestSession();
+
+        Query = "";
+
+        StreamingText = null;
+
+        IsRecording = false;
+
+        VoiceProcessing = false;
+
+        await SaveSessions();
+
+        await InvokeAsync(
+            StateHasChanged
+        );
+    }
+
+
+    private async Task CreateNewChatFromMenu()
+    {
+        CloseMobileSidebar();
+
+        await CreateNewChat();
+    }
+
+
+    /* ========================================================= */
+    /* SELECT CHAT                                                */
+    /* ========================================================= */
+
+    private void SelectConversation(
+        Guid id)
+    {
+        SessionService.SelectSession(id);
+
+        Query = "";
+
+        StreamingText = null;
+    }
+
+
+    private void SelectConversationFromMenu(
+        Guid id)
+    {
+        CloseMobileSidebar();
+
+        SelectConversation(id);
+    }
+
+
+    /* ========================================================= */
+    /* DELETE CHAT                                                 */
+    /* ========================================================= */
+
+    private async Task DeleteChat(
+        Guid sessionId)
+    {
+        SessionService.DeleteSession(
+            sessionId
+        );
+
+        if (SessionService.Sessions.Count == 0)
+        {
+            SessionService.CreateGuestSession();
+        }
+
+        Query = "";
+
+        StreamingText = null;
+
+        await SaveSessions();
+
+        await InvokeAsync(
+            StateHasChanged
+        );
+    }
+
+
+    /* ========================================================= */
+    /* DELETE ALL                                                  */
+    /* ========================================================= */
+
+    private void OpenDeleteAllDialog()
+    {
+        ShowDeleteAllDialog = true;
+    }
+
+
+    private void CloseDeleteAllDialog()
+    {
+        ShowDeleteAllDialog = false;
+    }
+
+
+    private async Task ConfirmDeleteAllChats()
+    {
+        SessionService.DeleteAllSessions();
+
+        SessionService.CreateGuestSession();
+
+        Query = "";
+
+        StreamingText = null;
+
+        ShowDeleteAllDialog = false;
+
+        await SaveSessions();
+
+        await InvokeAsync(
+            StateHasChanged
+        );
+    }
+
+
+    /* ========================================================= */
+    /* STORAGE                                                     */
+    /* ========================================================= */
+
+    private async Task SaveSessions()
+    {
+        var sessions =
+            SessionService.GetSessionsForStorage();
+
+        await BrowserStorage.SetAsync(
+            StorageKey,
+            sessions
+        );
+    }
+
+
+    /* ========================================================= */
+    /* SIDEBAR                                                     */
+    /* ========================================================= */
+
+    private void ToggleSidebar()
+    {
+        SidebarCollapsed =
+            !SidebarCollapsed;
+    }
+
+
+    private void HandleSidebarCollapse()
+    {
+        SidebarCollapsed = true;
+
+        MobileSidebarOpen = false;
+    }
+
+
+    private void ToggleMobileSidebar()
+    {
+        MobileSidebarOpen =
+            !MobileSidebarOpen;
+    }
+
+
+    private void CloseMobileSidebar()
+    {
+        MobileSidebarOpen = false;
+    }
+
+
+    /* ========================================================= */
+    /* THEME                                                       */
+    /* ========================================================= */
+
+    private void ToggleTheme()
+    {
+        IsDark = !IsDark;
+    }
+
+
+    /* ========================================================= */
+    /* QUICK QUESTIONS                                             */
+    /* ========================================================= */
+
+    private Task StartDeliveryQuestion()
+    {
+        return UsePrompt(
+            "How long does standard delivery take?"
+        );
+    }
+
+
+    private Task StartReturnQuestion()
+    {
+        return UsePrompt(
+            "What is the return and refund policy?"
+        );
+    }
+
+
+    private Task StartPaymentQuestion()
+    {
+        return UsePrompt(
+            "What payment and billing options are available?"
+        );
+    }
+
+
+    private Task StartProductQuestion()
+    {
+        return UsePrompt(
+            "Can you tell me about HuluBeje products?"
+        );
+    }
+
+
+    private async Task UsePrompt(
+        string prompt)
+    {
+        Query = prompt;
+
+        await SendMessage();
+    }
+
+
+    /* ========================================================= */
+    /* KEYBOARD                                                    */
+    /* ========================================================= */
+
+    private async Task HandleKeyDown(
+        KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" &&
+            !e.ShiftKey)
+        {
+            await SendMessage();
+        }
+    }
+
+
+    /* ========================================================= */
+    /* TEXT CHAT                                                   */
+    /* ========================================================= */
+
+    private async Task SendMessage()
+    {
+        if (!CanSend ||
+            ActiveConversation is null)
+        {
+            return;
+        }
+
+        var userMessage =
+            Query.Trim();
+
+        if (string.IsNullOrWhiteSpace(
+                userMessage))
+        {
+            return;
+        }
+
+        var conversationHistory =
+            ActiveConversation.Messages
+                .Select(message =>
+                    new ConversationHistoryMessage
+                    {
+                        Role = message.Role,
+                        Content = message.Content
+                    }
+                )
+                .ToList();
+
+        Query = "";
+
+        Loading = true;
+
+        SessionService.AddMessage(
+            "user",
+            userMessage
+        );
+
+        await InvokeAsync(
+            StateHasChanged
+        );
+
+        try
+        {
+            var answer =
+                await RagService.AskAsync(
+                    userMessage,
+                    conversationHistory
+                );
+
+            await StreamText(
+                answer
+            );
+
+            SessionService.AddMessage(
+                "assistant",
+                answer
+            );
+
+            StreamingText = null;
+
+            await SaveSessions();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(
+                $"TEXT CHAT ERROR: {ex}"
+            );
+
+            StreamingText = null;
+
+            SessionService.AddMessage(
+                "assistant",
+                "Sorry, something went wrong. Please try again."
+            );
+
+            await SaveSessions();
+        }
+        finally
+        {
+            Loading = false;
+
+            await InvokeAsync(
+                StateHasChanged
+            );
+        }
+    }
+
+
+    /* ========================================================= */
+    /* VOICE                                                      */
+    /* ========================================================= */
+
+    private async Task ToggleVoiceRecording()
+    {
+        if (IsRecording)
+        {
+            await StopVoiceRecording();
+
+            return;
+        }
+
+        await StartVoiceRecording();
+    }
+
+
+    private async Task StartVoiceRecording()
+    {
+        if (Loading ||
+            VoiceProcessing)
+        {
+            return;
+        }
+
+        try
+        {
+            Console.WriteLine(
+                "VOICE: Starting browser recording..."
+            );
+
+            IsRecording = true;
+
+            await InvokeAsync(
+                StateHasChanged
+            );
+
+            await JS.InvokeVoidAsync(
+                "huluVoiceRecorder.start"
+            );
+
+            Console.WriteLine(
+                "VOICE: Browser recording started."
+            );
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(
+                $"VOICE START ERROR: {ex}"
+            );
+
+            IsRecording = false;
+
+            await InvokeAsync(
+                StateHasChanged
+            );
+        }
+    }
+
+
+   private async Task StopVoiceRecording()
+{
+    if (!IsRecording)
+    {
+        return;
+    }
+
+    try
+    {
+        IsRecording = false;
+
+        VoiceProcessing = true;
+
+        await InvokeAsync(
+            StateHasChanged
+        );
+
+        Console.WriteLine(
+            "VOICE: Stopping browser recording..."
+        );
+
+        await ProcessVoiceMessage();
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine(
+            $"VOICE ERROR: {ex}"
+        );
+
+        StreamingText = null;
+
+        if (ActiveConversation is not null)
+        {
+            SessionService.AddMessage(
+                "assistant",
+                "Sorry, something went wrong while processing your voice message."
+            );
+
+            await SaveSessions();
+        }
+    }
+    finally
+    {
+        IsRecording = false;
+        VoiceProcessing = false;
+
+        await InvokeAsync(
+            StateHasChanged
+        );
+    }
+}
+
+   private async Task ProcessVoiceMessage()
+{
+    if (ActiveConversation is null)
+    {
+        VoiceProcessing = false;
+        return;
+    }
+
+    try
+    {
+        Console.WriteLine(
+            "VOICE: Preparing conversation history..."
+        );
+
+        var conversationHistory =
+            ActiveConversation.Messages
+                .Select(message =>
+                    new ConversationHistoryMessage
+                    {
+                        Role = message.Role,
+                        Content = message.Content
+                    }
+                )
+                .ToList();
+
+        Console.WriteLine(
+            "VOICE: Sending browser audio directly to FastAPI..."
+        );
+
+        var responseJson =
+            await JS.InvokeAsync<string>(
+                "huluVoiceRecorder.upload",
+                TimeSpan.FromMinutes(2),
+                conversationHistory
+            );
+
+        Console.WriteLine(
+            "VOICE: Voice API response received."
+        );
+
+        var result =
+            System.Text.Json.JsonSerializer
+                .Deserialize<RagService.VoiceChatResponse>(
+                    responseJson
+                );
+
+        if (result is null)
+        {
+            throw new InvalidOperationException(
+                "Voice API returned an empty response."
+            );
+        }
+
+        var transcription =
+            result.Transcription?.Trim();
+
+        var answer =
+            result.Answer?.Trim();
+
+        Console.WriteLine(
+            $"VOICE: Transcription: {transcription}"
+        );
+
+        Console.WriteLine(
+            $"VOICE: Answer length: {answer?.Length ?? 0}"
+        );
+
+        if (
+            string.IsNullOrWhiteSpace(
+                transcription
+            )
+        )
+        {
+            throw new InvalidOperationException(
+                "The voice API returned an empty transcription."
+            );
+        }
+
+        SessionService.AddMessage(
+            "user",
+            transcription
+        );
+
+        await InvokeAsync(
+            StateHasChanged
+        );
+
+        if (
+            !string.IsNullOrWhiteSpace(
+                answer
+            )
+        )
+        {
+            await StreamText(
+                answer
+            );
+
+            SessionService.AddMessage(
+                "assistant",
+                answer
+            );
+
+            StreamingText = null;
+        }
+
+        await SaveSessions();
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine(
+            $"VOICE API ERROR: {ex}"
+        );
+
+        StreamingText = null;
+
+        if (ActiveConversation is not null)
+        {
+            SessionService.AddMessage(
+                "assistant",
+                "Sorry, something went wrong while processing your voice message."
+            );
+
+            await SaveSessions();
+        }
+    }
+    finally
+    {
+        IsRecording = false;
+        VoiceProcessing = false;
+
+        await InvokeAsync(
+            StateHasChanged
+        );
+    }
+}
+
+    /* ========================================================= */
+    /* STREAMING                                                   */
+    /* ========================================================= */
+
+    private async Task StreamText(
+        string fullText)
+    {
+        if (string.IsNullOrEmpty(
+                fullText))
+        {
+            return;
+        }
+
+        var length =
+            fullText.Length;
+
+        var chunkSize =
+            Math.Max(
+                1,
+                length / 60
+            );
+
+        var totalSteps =
+            (int)Math.Ceiling(
+                (double)length /
+                chunkSize
+            );
+
+        var duration =
+            Math.Min(
+                2200,
+                Math.Max(
+                    600,
+                    length * 12
+                )
+            );
+
+        var delay =
+            Math.Max(
+                12,
+                duration / totalSteps
+            );
+
+        StreamingText = "";
+
+
+        for (
+            var i = 0;
+            i < length;
+            i += chunkSize)
+        {
+            var end =
+                Math.Min(
+                    i + chunkSize,
+                    length
+                );
+
+            StreamingText =
+                fullText[..end];
+
+            await InvokeAsync(
+                StateHasChanged
+            );
+
+            await Task.Delay(
+                delay
+            );
+        }
+
+
+        StreamingText =
+            fullText;
+
+        await InvokeAsync(
+            StateHasChanged
+        );
+    }
+
+
+    /* ========================================================= */
+    /* THEME                                                       */
+    /* ========================================================= */
+
+    private string ThemeClass =>
+        IsDark
+            ? "theme-dark"
+            : "theme-light";
+
+
+    private string ThemeVariables =>
+        IsDark
+            ?
+            "--hb-bg:#14120f;" +
+            "--hb-fg:#ece5d9;" +
+            "--hb-muted:#7b7268;" +
+            "--hb-line:rgba(236,229,217,.10);" +
+            "--hb-line-soft:rgba(236,229,217,.05);" +
+            "--hb-sidebar:#100e0c;" +
+            "--hb-surface:#1c1916;" +
+            "--hb-accent:#e04b3c;" +
+            "--hb-user-fg:#fff8ee;" +
+            "--hb-btn-fg:#fff8ee;"
+            :
+            "--hb-bg:#fbfaf7;" +
+            "--hb-fg:#1a1512;" +
+            "--hb-muted:#8a8079;" +
+            "--hb-line:rgba(26,21,18,.10);" +
+            "--hb-line-soft:rgba(26,21,18,.05);" +
+            "--hb-sidebar:#f6f4ef;" +
+            "--hb-surface:#ffffff;" +
+            "--hb-accent:#c4382a;" +
+            "--hb-user-fg:#fffaf5;" +
+            "--hb-btn-fg:#fffaf5;";
+
+
+    /* ========================================================= */
+    /* SIDEBAR CLASSES                                             */
+    /* ========================================================= */
+
+    private string SidebarClass =>
+        SidebarCollapsed
+            ? "hb-sidebar-collapsed w-[64px]"
+            : "w-[264px]";
+
+
+    private string NewChatClass =>
+        SidebarCollapsed
+            ?
+            "mx-auto flex h-9 w-9 items-center justify-center rounded-lg border transition-colors duration-200 hover:bg-[var(--hb-line-soft)]"
+            :
+            "flex h-9 w-full items-center gap-2.5 rounded-lg border px-3 text-left text-[12.5px] font-medium transition-colors duration-200 hover:bg-[var(--hb-line-soft)]";
+
+
+    private string ThemeButtonClass =>
+        SidebarCollapsed
+            ?
+            "mx-auto flex h-9 w-9 items-center justify-center rounded-lg transition-colors duration-200 hover:bg-[var(--hb-line-soft)]"
+            :
+            "flex h-9 w-full items-center gap-2.5 rounded-lg px-3 text-left text-[12.5px] font-medium transition-colors duration-200 hover:bg-[var(--hb-line-soft)]";
+
+
+    private string GetConversationClass(
+        Guid id)
+    {
+        return ActiveConversation?.Id == id
+            ? "hb-conversation-button hb-active"
+            : "hb-conversation-button";
+    }
+
+
+    /* ========================================================= */
+    /* SEND STATE                                                  */
+    /* ========================================================= */
+
+    private bool CanSend =>
+        !Loading &&
+        !IsRecording &&
+        !VoiceProcessing &&
+        ActiveConversation is not null &&
+        !string.IsNullOrWhiteSpace(Query);
+
+}
