@@ -18,6 +18,7 @@ class RAGResult:
 
 
 class RAGPipeline:
+
     def __init__(
         self,
         query_generator: QueryGenerator,
@@ -31,6 +32,10 @@ class RAGPipeline:
         self.context_builder = context_builder
         self.answer_generator = answer_generator
 
+    # ---------------------------------------------------------
+    # NORMAL TEXT CHAT
+    # ---------------------------------------------------------
+
     def run(
         self,
         user_message: str,
@@ -43,17 +48,13 @@ class RAGPipeline:
                 "User message cannot be empty."
             )
 
-        # -------------------------------------------------
-        # 1. Prepare active conversation history
-        # -------------------------------------------------
-
         conversation_history = (
             conversation_history or []
         )
 
-        # -------------------------------------------------
-        # 2. Understand the customer's current message
-        # -------------------------------------------------
+        # -----------------------------------------------------
+        # Query understanding
+        # -----------------------------------------------------
 
         understanding = (
             self.query_generator.understand(
@@ -61,50 +62,76 @@ class RAGPipeline:
             )
         )
 
-        # -------------------------------------------------
-        # 3. Retrieve relevant HuluBeje knowledge
-        # -------------------------------------------------
+        # -----------------------------------------------------
+        # Continue using the normal RAG flow
+        # -----------------------------------------------------
 
-        chunks = self.retriever.retrieve(
-            query=understanding.retrieval_query,
+        return self.run_from_retrieval_query(
+            retrieval_query=(
+                understanding.retrieval_query
+            ),
+            original_language=(
+                understanding.original_language
+            ),
+            current_message=user_message,
+            conversation_history=conversation_history,
             top_k=top_k,
         )
 
-        # -------------------------------------------------
-        # 4. Build knowledge context
-        # -------------------------------------------------
+    # ---------------------------------------------------------
+    # RAG FROM AN ALREADY GENERATED RETRIEVAL QUERY
+    # ---------------------------------------------------------
+
+    def run_from_retrieval_query(
+        self,
+        retrieval_query: str,
+        original_language: str,
+        current_message: str,
+        conversation_history: list[dict] | None = None,
+        top_k: int = 3,
+    ) -> RAGResult:
+
+        if not retrieval_query.strip():
+            raise ValueError(
+                "Retrieval query cannot be empty."
+            )
+
+        conversation_history = (
+            conversation_history or []
+        )
+
+        # -----------------------------------------------------
+        # Retrieval
+        # -----------------------------------------------------
+
+        chunks = self.retriever.retrieve(
+            query=retrieval_query,
+            top_k=top_k,
+        )
+
+        # -----------------------------------------------------
+        # Context
+        # -----------------------------------------------------
 
         context = self.context_builder.build(
             chunks
         )
 
-        # -------------------------------------------------
-        # 5. Generate the final customer answer
-        # -------------------------------------------------
+        # -----------------------------------------------------
+        # Answer generation
+        # -----------------------------------------------------
 
         answer = self.answer_generator.generate(
-            original_language=(
-                understanding.original_language
-            ),
-            retrieval_query=(
-                understanding.retrieval_query
-            ),
+            original_language=original_language,
+            retrieval_query=retrieval_query,
             context=context,
-            current_message=user_message,
+            current_message=current_message,
             conversation_history=conversation_history,
         )
 
-        # -------------------------------------------------
-        # 6. Return the complete RAG result
-        # -------------------------------------------------
-
         return RAGResult(
-            original_language=(
-                understanding.original_language
-            ),
-            retrieval_query=(
-                understanding.retrieval_query
-            ),
+            original_language=original_language,
+            retrieval_query=retrieval_query,
             chunks=chunks,
             context=context,
             answer=answer,

@@ -13,7 +13,9 @@ from fastapi import (
     UploadFile,
 )
 
-from app.voice.language_codes import speechbrain_to_seamless
+from app.voice.language_codes import (
+    speechbrain_to_seamless,
+)
 
 
 router = APIRouter(
@@ -29,9 +31,21 @@ def voice_chat(
     conversation_history: str = "[]",
 ):
 
-    # ---------------------------------------------------------
-    # 1. Validate audio
-    # ---------------------------------------------------------
+    # =========================================================
+    # 1. REQUEST RECEIVED
+    # =========================================================
+
+    print()
+    print("=" * 70)
+    print("VOICE API REQUEST RECEIVED")
+    print("=" * 70)
+    print(f"Endpoint: /api/v1/voice/chat")
+    print(f"Filename: {audio.filename}")
+    print(f"Content type: {audio.content_type}")
+
+    # =========================================================
+    # 2. VALIDATE AUDIO
+    # =========================================================
 
     if not audio.filename:
         raise HTTPException(
@@ -39,94 +53,155 @@ def voice_chat(
             detail="Audio file is required.",
         )
 
-    # ---------------------------------------------------------
-    # 2. Parse conversation history
-    # ---------------------------------------------------------
+    # =========================================================
+    # 3. PARSE CONVERSATION HISTORY
+    # =========================================================
 
     try:
-        history = json.loads(conversation_history)
+
+        history = json.loads(
+            conversation_history
+        )
 
         if not isinstance(history, list):
             raise ValueError(
                 "Conversation history must be a list."
             )
 
-    except (json.JSONDecodeError, ValueError):
+    except (
+        json.JSONDecodeError,
+        ValueError,
+    ):
+
         raise HTTPException(
             status_code=400,
             detail="Invalid conversation history.",
         )
 
-    # ---------------------------------------------------------
-    # 3. Read audio
-    # ---------------------------------------------------------
+    # =========================================================
+    # 4. READ AUDIO
+    # =========================================================
 
     try:
+
         audio_bytes = audio.file.read()
+
+        print()
+        print("=" * 70)
+        print("VOICE AUDIO")
+        print("=" * 70)
+        print(
+            f"Audio bytes: {len(audio_bytes)}"
+        )
 
         waveform, sample_rate = sf.read(
             BytesIO(audio_bytes),
             dtype="float32",
         )
 
-    except Exception as exc:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Could not read audio: {exc}",
+        print(
+            f"Sample rate: {sample_rate}"
         )
 
-    # ---------------------------------------------------------
-    # 4. Detect spoken language
-    # ---------------------------------------------------------
+        print(
+            f"Sample count: {len(waveform)}"
+        )
+
+    except Exception as exc:
+
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Could not read audio: {exc}"
+            ),
+        )
+
+    # =========================================================
+    # 5. LANGUAGE IDENTIFICATION
+    # =========================================================
+
+    print()
+    print("=" * 70)
+    print("VOICE STAGE 1: LANGUAGE IDENTIFICATION")
+    print("=" * 70)
 
     try:
+
         language, confidence = (
-            request.app.state.language_identifier.identify(
+            request
+            .app
+            .state
+            .language_identifier
+            .identify(
                 audio=waveform,
                 sampling_rate=sample_rate,
             )
         )
 
-        print()
-        print("=" * 70)
-        print("VOICE LANGUAGE DETECTION")
-        print("=" * 70)
-        print(f"Detected language: {language}")
-        print(f"Confidence: {confidence:.2f}%")
-
-    except Exception as exc:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Language identification failed: {exc}",
-        )
-
-    # ---------------------------------------------------------
-    # 5. Convert SpeechBrain language -> Seamless language
-    # ---------------------------------------------------------
-
-    try:
-        seamless_language = speechbrain_to_seamless(
-            language
+        print(
+            f"Detected language: {language}"
         )
 
         print(
-            f"Seamless language code: "
+            f"Confidence: {confidence:.2f}%"
+        )
+
+    except Exception as exc:
+
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "Language identification failed: "
+                f"{exc}"
+            ),
+        )
+
+    # =========================================================
+    # 6. LANGUAGE MAPPING
+    # =========================================================
+
+    print()
+    print("=" * 70)
+    print("VOICE STAGE 2: LANGUAGE MAPPING")
+    print("=" * 70)
+
+    try:
+
+        seamless_language = (
+            speechbrain_to_seamless(
+                language
+            )
+        )
+
+        print(
+            f"Seamless language: "
             f"{seamless_language}"
         )
 
     except Exception as exc:
+
         raise HTTPException(
             status_code=400,
             detail=str(exc),
         )
 
-    # ---------------------------------------------------------
-    # 6. Speech -> Text
-    # ---------------------------------------------------------
+    # =========================================================
+    # 7. SPEECH TO TEXT
+    # =========================================================
+
+    print()
+    print("=" * 70)
+    print("VOICE STAGE 3: SPEECH TO TEXT")
+    print("=" * 70)
 
     try:
+
         transcription = (
-            request.app.state.speech_to_text.transcribe(
+            request
+            .app
+            .state
+            .speech_to_text
+            .transcribe(
                 audio=waveform,
                 sampling_rate=sample_rate,
                 target_language=seamless_language,
@@ -134,15 +209,22 @@ def voice_chat(
         )
 
     except Exception as exc:
+
         raise HTTPException(
             status_code=500,
-            detail=f"Speech transcription failed: {exc}",
+            detail=(
+                "Speech transcription failed: "
+                f"{exc}"
+            ),
         )
 
     if not transcription.strip():
+
         raise HTTPException(
             status_code=422,
-            detail="No speech could be recognized.",
+            detail=(
+                "No speech could be recognized."
+            ),
         )
 
     print()
@@ -151,29 +233,133 @@ def voice_chat(
     print("=" * 70)
     print(transcription)
 
-    # ---------------------------------------------------------
-    # 7. SAME RAG PIPELINE AS TEXT CHAT
-    # ---------------------------------------------------------
+    # =========================================================
+    # 8. GENERATE RETRIEVAL QUERY
+    # =========================================================
+
+    print()
+    print("=" * 70)
+    print("VOICE STAGE 4: QUERY UNDERSTANDING")
+    print("=" * 70)
 
     try:
-        rag_result = request.app.state.rag_pipeline.run(
-            user_message=transcription,
-            conversation_history=history,
+
+        pipeline = (
+            request
+            .app
+            .state
+            .rag_pipeline
+        )
+
+        understanding = (
+            pipeline
+            .query_generator
+            .understand(
+                transcription
+            )
+        )
+
+        retrieval_query = (
+            understanding.retrieval_query
+        )
+
+        original_language = (
+            understanding.original_language
+        )
+
+        print(
+            f"Original language: "
+            f"{original_language}"
+        )
+
+        print(
+            f"Retrieval query: "
+            f"{retrieval_query}"
         )
 
     except Exception as exc:
+
         raise HTTPException(
             status_code=500,
-            detail=f"RAG processing failed: {exc}",
+            detail=(
+                "Retrieval query generation failed: "
+                f"{exc}"
+            ),
         )
 
-    # ---------------------------------------------------------
-    # 8. Return result
-    # ---------------------------------------------------------
+    # =========================================================
+    # 9. RUN EXISTING RAG USING RETRIEVAL QUERY
+    # =========================================================
+
+    print()
+    print("=" * 70)
+    print("VOICE STAGE 5: RAG PIPELINE")
+    print("=" * 70)
+
+    try:
+
+        rag_result = (
+            pipeline
+            .run_from_retrieval_query(
+                retrieval_query=retrieval_query,
+                original_language=original_language,
+                current_message=transcription,
+                conversation_history=history,
+                top_k=3,
+            )
+        )
+
+        print(
+            f"Retrieved chunks: "
+            f"{len(rag_result.chunks)}"
+        )
+
+        print(
+            f"Answer length: "
+            f"{len(rag_result.answer)}"
+        )
+
+    except Exception as exc:
+
+        print()
+        print(
+            "VOICE RAG ERROR:"
+        )
+        print(exc)
+
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "RAG processing failed: "
+                f"{exc}"
+            ),
+        )
+
+    # =========================================================
+    # 10. RESPONSE READY
+    # =========================================================
+
+    print()
+    print("=" * 70)
+    print("VOICE STAGE 6: RESPONSE READY")
+    print("=" * 70)
+
+    print(
+        f"Answer: {rag_result.answer}"
+    )
+
+    print()
+    print("=" * 70)
+    print("VOICE API REQUEST COMPLETED")
+    print("=" * 70)
+
+    # =========================================================
+    # 11. RETURN TO BLAZOR
+    # =========================================================
 
     return {
         "transcription": transcription,
         "answer": rag_result.answer,
-        "original_language": rag_result.original_language,
-        "retrieval_query": rag_result.retrieval_query,
+        "original_language": original_language,
+        "retrieval_query": retrieval_query,
     }
