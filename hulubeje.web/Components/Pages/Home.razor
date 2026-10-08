@@ -3,6 +3,7 @@
 
 @using Microsoft.AspNetCore.Components.Web
 @using Microsoft.JSInterop
+@using System.Text.RegularExpressions
 @using HuluBeje.Web.Models
 @using HuluBeje.Web.Services
 
@@ -1268,8 +1269,6 @@
                      alt="HuluBeje"
                      class="hb-logo h-12 w-20 shrink-0" />
 
-                
-
             </div>
 
 
@@ -1965,6 +1964,9 @@
     private const string StorageKey =
         "hulubeje_guest_sessions";
 
+    private const string ThemeKey =
+        "hulubeje_theme";
+
 
     /* ========================================================= */
     /* LOGO SOURCE — theme-aware                                  */
@@ -1974,6 +1976,58 @@
         IsDark
             ? "images/logo_dark.png"
             : "images/logo_light.png";
+
+
+    /* ========================================================= */
+    /* MARKDOWN CLEANER                                           */
+    /* ========================================================= */
+
+    private static string CleanAnswer(string text)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return text;
+        }
+
+        var s = text
+            .Replace("\r\n", "\n")
+            .Replace("\r", "\n");
+
+        // Fenced code blocks: remove the ``` markers
+        s = Regex.Replace(s, @"```[a-zA-Z0-9_-]*\n?", "");
+
+        // Bold: **text** → text
+        s = Regex.Replace(s, @"\*\*(.+?)\*\*", "$1");
+
+        // Underline-style bold: __text__ → text
+        s = Regex.Replace(s, @"__(.+?)__", "$1");
+
+        // Italic: *text* → text
+        s = Regex.Replace(s, @"\*(.+?)\*", "$1");
+
+        // Italic: _text_ → text
+        s = Regex.Replace(s, @"_(.+?)_", "$1");
+
+        // Inline code: `text` → text
+        s = Regex.Replace(s, @"`(.+?)`", "$1");
+
+        // Markdown headings: ### Heading → Heading
+        s = Regex.Replace(s, @"^\s*#{1,6}\s+", "", RegexOptions.Multiline);
+
+        // Bullets: "* item" or "- item" → "• item"
+        s = Regex.Replace(s, @"^\s*[\*\-]\s+", "• ", RegexOptions.Multiline);
+
+        // Leftover single asterisks
+        s = s.Replace("*", "");
+
+        // Leftover left/right bracket-style link syntax: [text](url) → text
+        s = Regex.Replace(s, @"\[(.+?)\]\(.+?\)", "$1");
+
+        // Collapse excessive blank lines
+        s = Regex.Replace(s, @"\n{3,}", "\n\n");
+
+        return s.Trim();
+    }
 
 
     private async Task ScrollToBottom(bool smooth = true)
@@ -1990,10 +2044,58 @@
     }
 
 
+    /* ========================================================= */
+    /* THEME PERSISTENCE                                          */
+    /* ========================================================= */
+
+    private async Task LoadThemeAsync()
+    {
+        try
+        {
+            var stored = await JS.InvokeAsync<string?>(
+                "localStorage.getItem",
+                ThemeKey
+            );
+
+            if (stored == "dark")
+            {
+                IsDark = true;
+            }
+            else if (stored == "light")
+            {
+                IsDark = false;
+            }
+        }
+        catch
+        {
+            // localStorage not available — keep default
+        }
+    }
+
+
+    private async Task SaveThemeAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync(
+                "localStorage.setItem",
+                ThemeKey,
+                IsDark ? "dark" : "light"
+            );
+        }
+        catch
+        {
+            // best-effort
+        }
+    }
+
+
     protected override async Task OnAfterRenderAsync(
         bool firstRender)
     {
         if (!firstRender) return;
+
+        await LoadThemeAsync();
 
         var sessions =
             await BrowserStorage.GetAsync<
@@ -2139,9 +2241,11 @@
     }
 
 
-    private void ToggleTheme()
+    private async Task ToggleTheme()
     {
         IsDark = !IsDark;
+
+        await SaveThemeAsync();
     }
 
 
@@ -2206,6 +2310,9 @@
                 userMessage,
                 conversationHistory
             );
+
+            // ── Clean markdown before streaming & saving ──
+            answer = CleanAnswer(answer);
 
             await StreamText(answer);
 
@@ -2384,6 +2491,9 @@
 
             if (!string.IsNullOrWhiteSpace(answer))
             {
+                // ── Clean markdown before streaming & saving ──
+                answer = CleanAnswer(answer);
+
                 await StreamText(answer);
 
                 SessionService.AddMessage("assistant", answer);

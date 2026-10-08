@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes.chat import router as chat_router
 from app.api.routes.voice import router as voice_router
+from app.api.routes.rag import router as rag_router
 
 from app.llm.answer_generator import AnswerGenerator
 from app.llm.client import LLMClient
@@ -91,6 +92,10 @@ async def lifespan(app: FastAPI):
         embedder=embedder,
         store=chroma_store,
     )
+
+    # Save retriever so the dedicated RAG
+    # retrieval API can use it.
+    app.state.retriever = retriever
 
     print("Retriever ready.")
 
@@ -185,6 +190,10 @@ async def lifespan(app: FastAPI):
     print("  /api/v1/voice/chat")
 
     print()
+    print("Knowledge Retrieval API:")
+    print("  /api/v1/rag/retrieve")
+
+    print()
     print("Health API:")
     print("  /health")
 
@@ -245,6 +254,10 @@ app.include_router(
 
 app.include_router(
     voice_router
+)
+
+app.include_router(
+    rag_router
 )
 
 
