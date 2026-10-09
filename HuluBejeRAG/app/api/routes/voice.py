@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from io import BytesIO
 
+import numpy as np
+import librosa
 import soundfile as sf
 
 from fastapi import (
@@ -362,4 +364,76 @@ def voice_chat(
         "answer": rag_result.answer,
         "original_language": original_language,
         "retrieval_query": retrieval_query,
+    }
+# =========================================================
+# NEW ENDPOINT: TRANSCRIPTION ONLY
+# =========================================================
+@router.post("/transcribe")
+def voice_transcribe(
+    request: Request,
+    audio: UploadFile = File(...),
+):
+    print()
+    print("=" * 70)
+    print("VOICE TRANSCRIBE API REQUEST RECEIVED")
+    print("=" * 70)
+    print(f"Endpoint: /api/v1/voice/transcribe")
+    print(f"Filename: {audio.filename}")
+
+    if not audio.filename:
+        raise HTTPException(
+            status_code=400,
+            detail="Audio file is required.",
+        )
+
+    # 1. READ AUDIO (Telegram/Live Mic parsing logic)
+    try:
+        audio_bytes = audio.file.read()
+        try:
+            waveform, sample_rate = sf.read(BytesIO(audio_bytes), dtype="float32")
+        except Exception:
+            print("Soundfile native read failed. Falling back to Librosa parser...")
+            waveform, sample_rate = librosa.load(BytesIO(audio_bytes), sr=None, dtype=np.float32)
+
+        if waveform.ndim > 1:
+            if waveform.shape[1] > waveform.shape[0]:
+                waveform = waveform.T
+            waveform = librosa.to_mono(waveform)
+
+        waveform = np.ascontiguousarray(waveform, dtype=np.float32)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Could not read audio file: {exc}")
+
+    # 2. LANGUAGE IDENTIFICATION
+    try:
+        language, confidence = request.app.state.language_identifier.identify(
+            audio=waveform, sampling_rate=sample_rate
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Language identification failed: {exc}")
+
+    # 3. LANGUAGE MAPPING
+    try:
+        seamless_language = speechbrain_to_seamless(language)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    # 4. SPEECH TO TEXT ONLY (STT)
+    try:
+        transcription = request.app.state.speech_to_text.transcribe(
+            audio=waveform,
+            sampling_rate=sample_rate,
+            target_language=seamless_language,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Speech transcription failed: {exc}")
+
+    if not transcription.strip():
+        raise HTTPException(status_code=422, detail="No speech could be recognized.")
+
+    # Return only the text details, skipping RAG and LLM completely
+    return {
+        "transcription": transcription,
+        "language": language,
+        "confidence": confidence
     }

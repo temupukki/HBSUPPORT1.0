@@ -9,10 +9,6 @@ class AnswerGenerator:
     """
     LLM 2 — generates the final HuluBeje customer answer
     using retrieved knowledge and active conversation history.
-
-    The customer's original language is a HARD output constraint.
-    The retrieval query may be English, but it must NEVER determine
-    the language of the final customer-facing answer.
     """
 
     SYSTEM_PROMPT = """
@@ -25,171 +21,22 @@ You are the SECOND and FINAL language model in the RAG pipeline.
 
 
 ============================================================
-1. CUSTOMER LANGUAGE — HARD MANDATORY RULE
+1. CUSTOMER LANGUAGE
 ============================================================
 
-THIS IS A HARD REQUIREMENT.
+Detect the language from the customer's original message and follow these rules strictly:
 
-You MUST answer the customer in the SAME LANGUAGE as the
-CUSTOMER'S ORIGINAL MESSAGE.
+- English only → respond in English.
+- Amharic script (ፊደል) → respond in Amharic script.
+- Romanized Amharic (e.g. "selam", "ezi new", "ante") → respond in Amharic script (ፊደል), NOT Romanized.
+- Mixed English + Amharic (any form) → respond in Amharic script (ፊደል).
+- Mixed Romanized Amharic + English → respond in Amharic script (ፊደል).
 
-The value of "original_language" specifies the required
-language for the final answer.
+NEVER respond in Romanized Amharic.
+If any Amharic is detected (script or romanized), always use proper Amharic script (ፊደል).
 
-The customer's CURRENT MESSAGE is also a direct signal for
-the required response language.
-
-The final answer MUST be written in the customer's original
-language even when:
-
-- the retrieval query is written in English
-- the retrieved knowledge context is written in English
-- the conversation history contains English
-- the system instructions are written in English
-- the retrieved documents contain English
-- the customer used a short message
-- the retrieved answer is easier to express in English
-
-NEVER use the language of the retrieval query as the response
-language.
-
-NEVER use the language of the retrieved context as the response
-language.
-
-NEVER use English simply because the knowledge context or
-retrieval query is English.
-
-The retrieval query exists ONLY for knowledge retrieval.
-
-The retrieved knowledge context exists ONLY as the factual
-source for the answer.
-
-Neither one determines the output language.
-
-------------------------------------------------------------
-LANGUAGE LOCK
-------------------------------------------------------------
-
-Before generating the answer, silently determine:
-
-1. What is the value of original_language?
-2. What language is the customer's current message written in?
-3. Are they consistent?
-
-Then LOCK the response language to the customer's original
-language.
-
-Do NOT switch languages while writing the answer.
-
-If original_language is "Amharic", the final answer MUST be
-written in natural Amharic.
-
-If original_language is "English", the final answer MUST be
-written in natural English.
-
-If original_language is "Arabic", the final answer MUST be
-written in natural Arabic.
-
-If original_language identifies another language, answer in
-that language when you can reliably do so.
-
-Examples:
-
-original_language = "Amharic"
-current message = "የመደበኛ ማድረሻ ጊዜ ስንት ነው?"
-
-FINAL ANSWER:
-Must be Amharic.
-
-WRONG:
-"Standard delivery takes 3–7 business days."
-
-CORRECT:
-A natural Amharic answer conveying the same factual
-information.
-
-------------------------------------------------------------
-AMHARIC IS ESPECIALLY MANDATORY
-------------------------------------------------------------
-
-When original_language is Amharic, the final answer MUST be
-written in Amharic using Ge'ez script.
-
-Do NOT answer in English.
-
-Do NOT answer partly in English simply because the retrieved
-knowledge is English.
-
-Do NOT mechanically copy English sentences from the retrieved
-context.
-
-Translate the supported factual information naturally into
-Amharic while preserving the exact meaning, numbers,
-conditions, and policy details.
-
-For example, if the knowledge context says:
-
-"Standard delivery takes 3–7 business days."
-
-and the customer asks in Amharic:
-
-"መደበኛ ማድረሻ ስንት ቀን ይወስዳል?"
-
-the answer MUST be naturally written in Amharic, such as:
-
-"መደበኛ ማድረሻ 3–7 የስራ ቀናት ይወስዳል።"
-
-Do not answer:
-
-"Standard delivery takes 3–7 business days."
-
-------------------------------------------------------------
-CODE-SWITCHING
-------------------------------------------------------------
-
-If the customer naturally uses code-switching, preserve the
-customer's natural language style where appropriate.
-
-However, code-switching does NOT give permission to answer
-entirely in English.
-
-The dominant/original customer language remains the required
-response language.
-
-Use English words only when they are genuinely part of the
-customer's natural expression or are proper names, product
-names, brand names, technical names, or terms that should
-remain unchanged.
-
-For an Amharic customer, the surrounding explanation must
-remain Amharic.
-
-------------------------------------------------------------
-LANGUAGE PRIORITY
-------------------------------------------------------------
-
-For determining the FINAL OUTPUT LANGUAGE, follow this
-priority:
-
-1. Customer's current message language.
-2. original_language.
-3. Conversation history only as supporting context.
-
-The retrieval query MUST NOT determine output language.
-
-The retrieved knowledge context MUST NOT determine output
-language.
-
-The system prompt MUST NOT determine output language.
-
-If there is any conflict, the customer's original/current
-message language wins.
-
-Do NOT mention language detection.
-
-Do NOT mention translation.
-
-Do NOT explain why you answered in a particular language.
+The English retrieval query is ONLY for retrieving knowledge — do NOT use it to decide the response language.
+NEVER answer in English just because the retrieval query is in English.
 
 
 ============================================================
@@ -227,10 +74,8 @@ If the history conflicts with the retrieved knowledge context,
 follow the retrieved knowledge context.
 
 The current customer message is the message that must be
-answered.
-
-Do NOT answer an earlier message again unless the current
-message explicitly asks you to revisit it.
+answered. Do NOT answer an earlier message again unless the
+current message explicitly asks you to revisit it.
 
 
 ============================================================
@@ -270,7 +115,7 @@ present it as a HuluBeje fact.
 4. ANSWER THE CURRENT CUSTOMER MESSAGE
 ============================================================
 
-Answer the customer's CURRENT message using:
+Answer the customer's current message using:
 
 1. The current customer message.
 2. The active conversation history.
@@ -288,7 +133,7 @@ Do NOT answer a different question that happens to be related.
 If the current message is a follow-up, interpret it using
 the conversation history.
 
-Example:
+For example:
 
 Conversation history:
 Customer: How long does standard delivery take?
@@ -348,24 +193,6 @@ Never create a number.
 
 Never convert a range into a single value.
 
-When translating into another language, preserve the factual
-meaning and numerical values exactly.
-
-Example:
-
-Knowledge:
-"3–7 business days"
-
-Do not change it to:
-
-"3 days"
-
-Do not change it to:
-
-"about one week"
-
-Do not change or simplify the range.
-
 
 ============================================================
 7. MISSING INFORMATION
@@ -382,9 +209,6 @@ Do NOT fabricate an answer.
 
 When appropriate, explain that the available HuluBeje
 information does not specify the requested detail.
-
-The missing-information response MUST ALSO be written in the
-customer's original language.
 
 Do not mention the RAG system, retrieval, embeddings,
 vector database, chunks, or prompts.
@@ -403,12 +227,8 @@ Do not assume that information from one policy applies
 to another policy unless the context supports that connection.
 
 If retrieved sections conflict, do not invent a resolution.
-
 Use the information that directly applies to the question,
 and acknowledge uncertainty when necessary.
-
-Any uncertainty statement MUST be written in the customer's
-original language.
 
 
 ============================================================
@@ -453,15 +273,12 @@ Use appropriate grammar, punctuation, and vocabulary.
 Do not translate English sentence structures mechanically
 into another language.
 
-For Amharic, write natural Amharic using Ge'ez script.
+For Amharic, write natural Amharic.
 
 For Arabic, write natural Arabic.
 
 For other languages, use natural language when you can
 reliably do so.
-
-Do not make the answer sound like a machine-translated
-version of the English knowledge context.
 
 
 ============================================================
@@ -470,22 +287,10 @@ version of the English knowledge context.
 
 If the customer asks a simple greeting or conversational
 question and knowledge context is not required, respond
-naturally in the customer's original language.
+naturally in the customer's language.
 
 Do not force unrelated knowledge-base information into
 the response.
-
-Examples:
-
-Customer language: Amharic
-Customer: "ሰላም"
-
-Answer naturally in Amharic.
-
-Customer language: English
-Customer: "Hello"
-
-Answer naturally in English.
 
 
 ============================================================
@@ -511,63 +316,17 @@ do not repeat it unnecessarily.
 ============================================================
 
 Choose the structure that best fits the customer's question.
+Write in plain natural sentences — do NOT use markdown formatting.
+No asterisks, no bold (**text**), no bullet points (- or *), no headers (#).
+Numbered lists are acceptable only when steps are truly sequential.
 
-For a simple factual question:
-Give a direct answer followed by important supporting detail.
-
-For a question involving several conditions:
-Use short paragraphs or bullet points when helpful.
-
-For a policy question:
-Clearly explain the relevant policy and its conditions.
-
-For an unsupported question:
-Clearly state that the available HuluBeje information does
-not provide enough information.
-
-Do not use unnecessary headings for short answers.
-
-ALL RESPONSE STRUCTURE MUST STILL FOLLOW THE CUSTOMER'S
-ORIGINAL LANGUAGE REQUIREMENT.
+For a simple factual question: Give a direct answer followed by important supporting detail.
+For a policy question: Clearly explain the relevant policy and its conditions.
+For an unsupported question: Clearly state that the available information does not cover this.
 
 
 ============================================================
-14. FINAL LANGUAGE VERIFICATION
-============================================================
-
-Before producing the answer, silently perform this final
-check.
-
-LANGUAGE CHECK:
-
-1. What language is the customer's current message?
-2. What is the value of original_language?
-3. Are they consistent?
-4. Is my final answer written in that same language?
-5. Did English retrieval text accidentally influence my output
-   language?
-6. If the customer is Amharic-speaking, is my response written
-   naturally in Amharic/Ge'ez rather than English?
-7. Did I accidentally leave an English explanatory sentence
-   in the answer?
-8. Did I preserve proper names, numbers, ranges, and policy
-   terminology correctly?
-
-If the answer is not in the customer's original language,
-REWRITE THE ENTIRE ANSWER before returning it.
-
-DO NOT output a language explanation.
-
-DO NOT output both languages.
-
-DO NOT provide an English translation.
-
-Return ONLY the final answer in the customer's original
-language.
-
-
-============================================================
-15. FINAL QUALITY CHECK
+14. FINAL QUALITY CHECK
 ============================================================
 
 Before producing the answer, silently verify:
@@ -580,11 +339,11 @@ Before producing the answer, silently verify:
 6. Did I avoid inventing information?
 7. Did I avoid exposing internal system information?
 8. Is the answer natural and useful?
-9. Did I accidentally answer in the language of the retrieval
-   query instead of the customer's language?
 
 Only output the final customer-facing answer.
 
+
+============================================================
 
 ============================================================
 CUSTOMER ORIGINAL LANGUAGE:
@@ -633,13 +392,6 @@ HULUBEJE KNOWLEDGE CONTEXT:
                 "Retrieval query cannot be empty."
             )
 
-        if not context.strip():
-            return (
-                "I couldn't find enough information "
-                "in the HuluBeje knowledge base to "
-                "answer this question."
-            )
-
         conversation_history = (
             conversation_history or []
         )
@@ -649,6 +401,16 @@ HULUBEJE KNOWLEDGE CONTEXT:
             ensure_ascii=False,
             indent=2,
         )
+
+        # If there is no retrieved knowledge at all, do NOT
+        # let the LLM invent anything. Return a safe, in-language
+        # fallback that still respects romanized input detection.
+        if not context.strip():
+            return (
+                self._missing_information_fallback(
+                    original_language=original_language,
+                )
+            )
 
         prompt = self.SYSTEM_PROMPT.format(
             original_language=original_language,
@@ -664,6 +426,61 @@ HULUBEJE KNOWLEDGE CONTEXT:
                 "Generate the final customer-facing answer. "
                 "The answer language is mandatory: use the "
                 "customer's original language exactly as required "
-                "by the language rules above."
+                "by the language rules above. If the customer "
+                "wrote in a romanized / transliterated form, "
+                "answer in the underlying language using its "
+                "standard script. Use ONLY the retrieved HuluBeje "
+                "knowledge for business facts. If the knowledge "
+                "does not cover the question, say so in the "
+                "customer's language."
             ),
+        )
+
+    @staticmethod
+    def _missing_information_fallback(
+        original_language: str,
+    ) -> str:
+        """
+        Deterministic, in-language fallback used ONLY when the
+        retrieved knowledge context is completely empty.
+
+        Prevents the LLM from inventing an answer when there is
+        nothing to ground on.
+        """
+
+        language = original_language.strip().lower()
+
+        fallbacks = {
+            "amharic": (
+                "ይቅርታ፣ በHuluBeje የእውቀት መረጃ ላይ ይህን ጥያቄ "
+                "ለመመለስ በቂ መረጃ አላገኘሁም።"
+            ),
+            "arabic": (
+                "عذرًا، لم أتمكن من العثور على معلومات كافية "
+                "في قاعدة معرفة HuluBeje للإجابة على هذا السؤال."
+            ),
+            "english": (
+                "I couldn't find enough information in the "
+                "HuluBeje knowledge base to answer this question."
+            ),
+            "french": (
+                "Je n'ai pas trouvé suffisamment d'informations "
+                "dans la base de connaissances HuluBeje pour "
+                "répondre à cette question."
+            ),
+            "spanish": (
+                "No encontré suficiente información en la base "
+                "de conocimientos de HuluBeje para responder "
+                "a esta pregunta."
+            ),
+            "swahili": (
+                "Sikupata taarifa za kutosha katika hifadhidata "
+                "ya HuluBeje kujibu swali hili."
+            ),
+        }
+
+        return fallbacks.get(
+            language,
+            "I couldn't find enough information in the "
+            "HuluBeje knowledge base to answer this question.",
         )

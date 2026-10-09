@@ -2427,7 +2427,7 @@
     }
 
 
-    private async Task ProcessVoiceMessage()
+   private async Task ProcessVoiceMessage()
     {
         if (ActiveConversation is null)
         {
@@ -2451,18 +2451,28 @@
 
             Console.WriteLine("VOICE: Sending browser audio directly to FastAPI...");
 
+            // 🎤 Create a real CancellationToken Source to survive long local AI workloads
+            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(3));
+
+            // The CancellationToken must come exactly as the SECOND argument
             var responseJson =
                 await JS.InvokeAsync<string>(
                     "huluVoiceRecorder.upload",
-                    TimeSpan.FromMinutes(2),
+                    cts.Token, // 👈 Placed here to satisfy the compiler and hold the connection
                     conversationHistory
                 );
 
             Console.WriteLine("VOICE: Voice API response received.");
 
+            // 🛠️ FIX: Add case-insensitive options so C# matches lowercase Python JSON keys
+            var serializationOptions = new System.Text.Json.JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            };
+
             var result =
                 System.Text.Json.JsonSerializer
-                    .Deserialize<RagService.VoiceChatResponse>(responseJson);
+                    .Deserialize<RagService.VoiceChatResponse>(responseJson, serializationOptions);
 
             if (result is null)
             {
