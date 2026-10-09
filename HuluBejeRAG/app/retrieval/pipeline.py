@@ -40,7 +40,7 @@ class RAGPipeline:
         self,
         user_message: str,
         conversation_history: list[dict] | None = None,
-        top_k: int = 3,
+        top_k: int = 5,
     ) -> RAGResult:
 
         if not user_message.strip():
@@ -88,7 +88,7 @@ class RAGPipeline:
         original_language: str,
         current_message: str,
         conversation_history: list[dict] | None = None,
-        top_k: int = 3,
+        top_k: int = 5,
     ) -> RAGResult:
 
         if not retrieval_query.strip():

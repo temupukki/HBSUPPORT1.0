@@ -53,7 +53,7 @@ def retrieve_knowledge(
     try:
         chunks = retriever.retrieve(
             query=question,
-            top_k=3,
+            top_k=5,
         )
 
         results = [

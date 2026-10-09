@@ -25,7 +25,7 @@ class Retriever:
     from ChromaDB using BGE-large embeddings.
     """
 
-    DEFAULT_TOP_K = 3
+    DEFAULT_TOP_K = 5
 
     def __init__(
         self,
