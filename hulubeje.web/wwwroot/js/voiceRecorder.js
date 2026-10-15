@@ -1,573 +1,393 @@
-window.huluVoiceRecorder = (() => {
 
+window.huluVoiceRecorder = (() => {
     let audioContext = null;
     let mediaStream = null;
     let source = null;
     let workletNode = null;
+    let silentGain = null;
 
     let recordedBuffers = [];
     let recordingSampleRate = 48000;
+    let recordingStartedAt = 0;
+    let isRecording = false;
 
     async function start() {
-
-        if (mediaStream) {
-            throw new Error(
-                "Recording is already active."
-            );
+        if (mediaStream || isRecording) {
+            throw new Error("Recording is already active.");
         }
 
-        console.log(
-            "HuluVoice: requesting microphone..."
-        );
+        console.log("HuluVoice: requesting microphone...");
 
-        mediaStream =
-            await navigator.mediaDevices.getUserMedia({
+        try {
+            mediaStream = await navigator.mediaDevices.getUserMedia({
                 audio: {
-                    channelCount: 1,
-                    echoCancellation: true,
-                    noiseSuppression: true,
-                    autoGainControl: true
+                    channelCount: { ideal: 1 },
+
+                    // Diagnostic mode: capture audio without
+                    // requesting browser speech enhancements.
+                    echoCancellation: false,
+                    noiseSuppression: false,
+                    autoGainControl: false
                 }
             });
 
-        console.log(
-            "HuluVoice: microphone permission granted."
-        );
+            const track = mediaStream.getAudioTracks()[0];
 
-        const AudioContextClass =
-            window.AudioContext ||
-            window.webkitAudioContext;
+            console.log("HuluVoice: microphone track:", {
+                label: track.label,
+                settings: track.getSettings(),
+                constraints: track.getConstraints()
+            });
 
-        audioContext =
-            new AudioContextClass();
+            const AudioContextClass =
+                window.AudioContext || window.webkitAudioContext;
 
-        recordingSampleRate =
-            audioContext.sampleRate;
+            audioContext = new AudioContextClass();
 
-        console.log(
-            `HuluVoice: AudioContext sample rate = ${recordingSampleRate}`
-        );
-
-        if (
-            audioContext.state === "suspended"
-        ) {
-            await audioContext.resume();
-        }
-
-        console.log(
-            `HuluVoice: AudioContext state = ${audioContext.state}`
-        );
-
-        const workletCode = `
-            class HuluVoiceProcessor extends AudioWorkletProcessor {
-
-                process(inputs) {
-
-                    const input =
-                        inputs[0];
-
-                    if (
-                        input &&
-                        input.length > 0 &&
-                        input[0]
-                    ) {
-
-                        const samples =
-                            new Float32Array(
-                                input[0]
-                            );
-
-                        this.port.postMessage(
-                            samples,
-                            [samples.buffer]
-                        );
-                    }
-
-                    return true;
-                }
+            if (audioContext.state === "suspended") {
+                await audioContext.resume();
             }
 
-            registerProcessor(
-                "hulu-voice-processor",
-                HuluVoiceProcessor
-            );
-        `;
+            recordingSampleRate = audioContext.sampleRate;
 
-        const blob =
-            new Blob(
-                [workletCode],
-                {
-                    type: "application/javascript"
+            console.log("HuluVoice: AudioContext:", {
+                sampleRate: recordingSampleRate,
+                state: audioContext.state
+            });
+
+            const workletCode = `
+                class HuluVoiceProcessor extends AudioWorkletProcessor {
+                    constructor() {
+                        super();
+                        this.stopped = false;
+
+                        this.port.onmessage = (event) => {
+                            if (event.data === "stop") {
+                                this.stopped = true;
+                            }
+                        };
+                    }
+
+                    process(inputs, outputs) {
+                        const input = inputs[0];
+
+                        if (
+                            !this.stopped &&
+                            input &&
+                            input.length > 0 &&
+                            input[0] &&
+                            input[0].length > 0
+                        ) {
+                            // Copy the mono channel before transferring it.
+                            const samples = new Float32Array(input[0]);
+
+                            this.port.postMessage(
+                                samples,
+                                [samples.buffer]
+                            );
+                        }
+
+                        // Keep the processor alive until the main thread
+                        // disconnects it.
+                        return true;
+                    }
                 }
+
+                registerProcessor(
+                    "hulu-voice-processor",
+                    HuluVoiceProcessor
+                );
+            `;
+
+            const workletBlob = new Blob(
+                [workletCode],
+                { type: "application/javascript" }
             );
 
-        const workletUrl =
-            URL.createObjectURL(blob);
+            const workletUrl = URL.createObjectURL(workletBlob);
 
-        try {
+            try {
+                await audioContext.audioWorklet.addModule(workletUrl);
+            } finally {
+                URL.revokeObjectURL(workletUrl);
+            }
 
-            await audioContext.audioWorklet.addModule(
-                workletUrl
-            );
+            source = audioContext.createMediaStreamSource(mediaStream);
 
-        }
-        finally {
-
-            URL.revokeObjectURL(
-                workletUrl
-            );
-        }
-
-        source =
-            audioContext.createMediaStreamSource(
-                mediaStream
-            );
-
-        workletNode =
-            new AudioWorkletNode(
+            workletNode = new AudioWorkletNode(
                 audioContext,
                 "hulu-voice-processor",
                 {
                     numberOfInputs: 1,
                     numberOfOutputs: 1,
+                    outputChannelCount: [1],
                     channelCount: 1,
                     channelCountMode: "explicit",
                     channelInterpretation: "speakers"
                 }
             );
 
-        recordedBuffers = [];
+            recordedBuffers = [];
 
-        workletNode.port.onmessage =
-            (event) => {
-
-                const samples =
-                    event.data;
+            workletNode.port.onmessage = (event) => {
+                const samples = event.data;
 
                 if (
-                    samples &&
+                    samples instanceof Float32Array &&
                     samples.length > 0
                 ) {
-
-                    recordedBuffers.push(
-                        new Float32Array(samples)
-                    );
+                    // Keep a separate copy in the main thread.
+                    recordedBuffers.push(new Float32Array(samples));
                 }
             };
 
-        source.connect(
-            workletNode
-        );
+            silentGain = audioContext.createGain();
+            silentGain.gain.value = 0;
 
-        /*
-         * Keep the AudioWorklet alive.
-         *
-         * The gain is zero so the user's
-         * microphone audio is not played
-         * back through the speakers.
-         */
-        const silentGain =
-            audioContext.createGain();
+            source.connect(workletNode);
+            workletNode.connect(silentGain);
+            silentGain.connect(audioContext.destination);
 
-        silentGain.gain.value = 0;
+            recordingStartedAt = performance.now();
+            isRecording = true;
 
-        workletNode.connect(
-            silentGain
-        );
-
-        silentGain.connect(
-            audioContext.destination
-        );
-
-        console.log(
-            "HuluVoice: AudioWorklet recorder started."
-        );
+            console.log("HuluVoice: recording started.");
+        } catch (error) {
+            cleanup();
+            throw error;
+        }
     }
 
     async function stop() {
-
-        if (!mediaStream) {
-            throw new Error(
-                "Recording is not active."
-            );
+        if (!mediaStream || !isRecording) {
+            throw new Error("Recording is not active.");
         }
 
-        console.log(
-            "HuluVoice: stopping recording..."
-        );
+        console.log("HuluVoice: stopping recording...");
 
-        /*
-         * Give the AudioWorklet a short moment
-         * to deliver the final audio buffers.
-         */
-        await new Promise(
-            resolve =>
-                setTimeout(
-                    resolve,
-                    200
-                )
-        );
-
-        const buffers =
-            recordedBuffers;
-
-        const sampleRate =
-            recordingSampleRate;
-
-        console.log(
-            `HuluVoice: recorded buffers = ${buffers.length}`
-        );
-
-        if (
-            !buffers ||
-            buffers.length === 0
-        ) {
-
-            cleanup();
-
-            throw new Error(
-                "No audio data was recorded."
-            );
+        // Tell the processor to stop sending new audio chunks.
+        if (workletNode) {
+            workletNode.port.postMessage("stop");
         }
+
+        // Allow already queued worklet messages to reach the main thread.
+        await new Promise(resolve => setTimeout(resolve, 150));
+
+        isRecording = false;
+
+        const buffers = recordedBuffers.slice();
+        const sampleRate = recordingSampleRate;
+        const durationSeconds =
+            (performance.now() - recordingStartedAt) / 1000;
 
         let totalSamples = 0;
 
-        for (
-            const buffer of buffers
-        ) {
-            totalSamples +=
-                buffer.length;
+        for (const buffer of buffers) {
+            totalSamples += buffer.length;
         }
 
-        console.log(
-            `HuluVoice: total samples = ${totalSamples}`
-        );
+        if (totalSamples === 0) {
+            cleanup();
+            throw new Error("No audio data was recorded.");
+        }
 
-        const wavBlob =
-            createWavBlob(
-                buffers,
-                sampleRate
+        const samples = new Float32Array(totalSamples);
+        let offset = 0;
+
+        for (const buffer of buffers) {
+            samples.set(buffer, offset);
+            offset += buffer.length;
+        }
+
+        let peak = 0;
+        let sumSquares = 0;
+        let clippedSamples = 0;
+
+        for (let i = 0; i < samples.length; i++) {
+            const value = samples[i];
+
+            if (!Number.isFinite(value)) {
+                cleanup();
+                throw new Error("Recording contains invalid audio samples.");
+            }
+
+            const absolute = Math.abs(value);
+
+            if (absolute > peak) {
+                peak = absolute;
+            }
+
+            sumSquares += value * value;
+
+            if (absolute >= 0.999) {
+                clippedSamples++;
+            }
+        }
+
+        const rms = Math.sqrt(sumSquares / samples.length);
+        const audioDuration = samples.length / sampleRate;
+
+        console.log("HuluVoice: recording diagnostics:", {
+            sampleRate,
+            durationSeconds: Number(durationSeconds.toFixed(2)),
+            audioDuration: Number(audioDuration.toFixed(2)),
+            totalSamples,
+            bufferCount: buffers.length,
+            peak: Number(peak.toFixed(5)),
+            rms: Number(rms.toFixed(5)),
+            clippedSamples
+        });
+
+        if (audioDuration < 0.5 || peak < 0.005 || rms < 0.001) {
+            cleanup();
+            throw new Error(
+                "Recording is too short or too quiet. " +
+                "Check your microphone and try again."
             );
+        }
 
-        console.log(
-            `HuluVoice: WAV size = ${wavBlob.size} bytes`
-        );
+        try {
+            const wavBlob = createWavBlob(samples, sampleRate);
 
-        cleanup();
+            console.log("HuluVoice: WAV created:", {
+                sizeBytes: wavBlob.size,
+                type: wavBlob.type
+            });
 
-        return wavBlob;
+            return wavBlob;
+        } finally {
+            cleanup();
+        }
     }
 
-    async function upload(
-        conversationHistory
-    ) {
+    async function upload(conversationHistory) {
+        const wavBlob = await stop();
 
-        const wavBlob =
-            await stop();
+        console.log("HuluVoice: uploading WAV to FastAPI...");
 
-        console.log(
-            "HuluVoice: uploading WAV directly to FastAPI..."
-        );
+        const formData = new FormData();
 
-        const formData =
-            new FormData();
-
-        formData.append(
-            "audio",
-            wavBlob,
-            "voice.wav"
-        );
-
+        formData.append("audio", wavBlob, "voice.wav");
         formData.append(
             "conversation_history",
-            JSON.stringify(
-                conversationHistory || []
-            )
+            JSON.stringify(conversationHistory || [])
         );
 
-        const response =
-            await fetch(
-                "http://127.0.0.1:8001/api/v1/voice/chat",
-                {
-                    method: "POST",
-                    body: formData
-                }
-            );
+        const response = await fetch(
+            "http://127.0.0.1:8001/api/v1/voice/chat",
+            {
+                method: "POST",
+                body: formData
+            }
+        );
+
+        const responseText = await response.text();
 
         console.log(
-            `HuluVoice: FastAPI response = ${response.status}`
+            `HuluVoice: API response status = ${response.status}`
         );
 
-        const responseText =
-            await response.text();
-
         if (!response.ok) {
-
             throw new Error(
                 `Voice API returned ${response.status}: ${responseText}`
             );
         }
 
-        console.log(
-            "HuluVoice: voice response received."
-        );
-
         return responseText;
     }
 
-    function createWavBlob(
-        buffers,
-        sampleRate
-    ) {
+    function createWavBlob(samples, sampleRate) {
+        const bytesPerSample = 2;
+        const dataSize = samples.length * bytesPerSample;
 
-        let totalLength = 0;
+        const buffer = new ArrayBuffer(44 + dataSize);
+        const view = new DataView(buffer);
 
-        for (
-            const buffer of buffers
-        ) {
+        writeString(view, 0, "RIFF");
+        view.setUint32(4, 36 + dataSize, true);
+        writeString(view, 8, "WAVE");
 
-            totalLength +=
-                buffer.length;
+        writeString(view, 12, "fmt ");
+        view.setUint32(16, 16, true);
+        view.setUint16(20, 1, true); // PCM
+        view.setUint16(22, 1, true); // Mono
+        view.setUint32(24, sampleRate, true);
+        view.setUint32(28, sampleRate * bytesPerSample, true);
+        view.setUint16(32, bytesPerSample, true);
+        view.setUint16(34, 16, true);
+
+        writeString(view, 36, "data");
+        view.setUint32(40, dataSize, true);
+
+        let offset = 44;
+
+        for (let i = 0; i < samples.length; i++) {
+            const sample = Math.max(-1, Math.min(1, samples[i]));
+
+            const pcmValue = sample < 0
+                ? Math.round(sample * 32768)
+                : Math.round(sample * 32767);
+
+            view.setInt16(offset, pcmValue, true);
+            offset += 2;
         }
 
-        const samples =
-            new Float32Array(
-                totalLength
-            );
+        return new Blob([buffer], { type: "audio/wav" });
+    }
 
-        let offset = 0;
-
-        for (
-            const buffer of buffers
-        ) {
-
-            samples.set(
-                buffer,
-                offset
-            );
-
-            offset +=
-                buffer.length;
+    function writeString(view, offset, value) {
+        for (let i = 0; i < value.length; i++) {
+            view.setUint8(offset + i, value.charCodeAt(i));
         }
-
-        const wavBuffer =
-            new ArrayBuffer(
-                44 +
-                samples.length * 2
-            );
-
-        const view =
-            new DataView(
-                wavBuffer
-            );
-
-        writeString(
-            view,
-            0,
-            "RIFF"
-        );
-
-        view.setUint32(
-            4,
-            36 +
-                samples.length * 2,
-            true
-        );
-
-        writeString(
-            view,
-            8,
-            "WAVE"
-        );
-
-        writeString(
-            view,
-            12,
-            "fmt "
-        );
-
-        view.setUint32(
-            16,
-            16,
-            true
-        );
-
-        view.setUint16(
-            20,
-            1,
-            true
-        );
-
-        view.setUint16(
-            22,
-            1,
-            true
-        );
-
-        view.setUint32(
-            24,
-            sampleRate,
-            true
-        );
-
-        view.setUint32(
-            28,
-            sampleRate * 2,
-            true
-        );
-
-        view.setUint16(
-            32,
-            2,
-            true
-        );
-
-        view.setUint16(
-            34,
-            16,
-            true
-        );
-
-        writeString(
-            view,
-            36,
-            "data"
-        );
-
-        view.setUint32(
-            40,
-            samples.length * 2,
-            true
-        );
-
-        let index = 44;
-
-        for (
-            let i = 0;
-            i < samples.length;
-            i++
-        ) {
-
-            let sample =
-                samples[i];
-
-            sample =
-                Math.max(
-                    -1,
-                    Math.min(
-                        1,
-                        sample
-                    )
-                );
-
-            const intSample =
-                sample < 0
-                    ? sample * 0x8000
-                    : sample * 0x7FFF;
-
-            view.setInt16(
-                index,
-                intSample,
-                true
-            );
-
-            index += 2;
-        }
-
-        return new Blob(
-            [wavBuffer],
-            {
-                type: "audio/wav"
-            }
-        );
     }
 
     function cleanup() {
+        isRecording = false;
 
         if (workletNode) {
-
-            try {
-                workletNode.port.onmessage = null;
-            }
-            catch {
-                // Ignore cleanup error.
-            }
+            workletNode.port.onmessage = null;
 
             try {
                 workletNode.disconnect();
-            }
-            catch {
-                // Already disconnected.
-            }
+            } catch {}
+
+            workletNode = null;
         }
 
         if (source) {
-
             try {
                 source.disconnect();
-            }
-            catch {
-                // Already disconnected.
-            }
+            } catch {}
+
+            source = null;
+        }
+
+        if (silentGain) {
+            try {
+                silentGain.disconnect();
+            } catch {}
+
+            silentGain = null;
         }
 
         if (mediaStream) {
-
-            mediaStream
-                .getTracks()
-                .forEach(
-                    track => track.stop()
-                );
+            mediaStream.getTracks().forEach(track => track.stop());
+            mediaStream = null;
         }
 
         if (audioContext) {
+            const context = audioContext;
+            audioContext = null;
 
-            try {
-
-                if (
-                    audioContext.state !==
-                    "closed"
-                ) {
-
-                    audioContext.close();
-                }
-
-            }
-            catch {
-                // Ignore cleanup error.
+            if (context.state !== "closed") {
+                context.close().catch(error => {
+                    console.warn("HuluVoice: closing audio context failed.", error);
+                });
             }
         }
 
-        workletNode = null;
-        source = null;
-        audioContext = null;
-        mediaStream = null;
         recordedBuffers = [];
     }
 
-    function writeString(
-        view,
-        offset,
-        value
-    ) {
-
-        for (
-            let i = 0;
-            i < value.length;
-            i++
-        ) {
-
-            view.setUint8(
-                offset + i,
-                value.charCodeAt(i)
-            );
-        }
-    }
-
-    return {
-        start,
-        stop,
-        upload
-    };
-
+    return { start, stop, upload };
 })();

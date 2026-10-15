@@ -13,6 +13,7 @@ builder.Services.AddScoped<ChatState>();
 builder.Services.AddHttpClient<RagService>(client =>
 {
     client.BaseAddress = new Uri("http://localhost:8001/");
+    client.Timeout = TimeSpan.FromMinutes(5);
 });
 
 var app = builder.Build();

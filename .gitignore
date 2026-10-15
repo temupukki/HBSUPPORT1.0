@@ -5,6 +5,7 @@ __pycache__/
 .venv/
 venv/
 env/
+venv312/
 
 # Environment / secrets
 .env
